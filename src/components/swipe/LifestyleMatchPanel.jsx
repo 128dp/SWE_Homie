@@ -32,7 +32,7 @@ function propertyMatchesAmenity(listing, amenityKey) {
   return tags.some((tag) => TAG_MAP[tag.toLowerCase()] === amenityKey);
 }
 
-export default function LifestyleMatchPanel({ listing, profile }) {
+export default function LifestyleMatchPanel({ listing, profile, scoreBreakdown }) {
   const [travelData, setTravelData] = useState(null);
   const [loadingTravel, setLoadingTravel] = useState(false);
 
@@ -64,7 +64,9 @@ export default function LifestyleMatchPanel({ listing, profile }) {
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Your Preferences</p>
           <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
             {enabledPrefs.map((key) => {
-              const matched = propertyMatchesAmenity(listing, key);
+              const breakdown = scoreBreakdown?.[key];
+              const matched = breakdown ? breakdown.status !== "none" : propertyMatchesAmenity(listing, key);
+              const minutes = breakdown?.minutes;
               return (
                 <div key={key} className="flex items-center gap-1.5">
                   {matched ? (
@@ -73,7 +75,7 @@ export default function LifestyleMatchPanel({ listing, profile }) {
                     <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
                   )}
                   <span className={`text-xs ${matched ? "text-slate-700" : "text-slate-400"}`}>
-                    {AMENITY_LABELS[key]}
+                    {AMENITY_LABELS[key]}{minutes != null ? ` (${minutes}min)` : ""}
                   </span>
                 </div>
               );

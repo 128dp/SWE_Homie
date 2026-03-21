@@ -22,7 +22,7 @@ app.use(express.json());
 
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
-  process.env.VITE_SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY
 );
 
 // ─── Haversine distance (metres) ─────────────────────────────────────────────
@@ -251,7 +251,7 @@ function computeScoreFromAmenities(amenities, profile, listingCoords) {
 app.post('/api/precompute-amenities', async (req, res) => {
   try {
     const { data: listings, error } = await supabase
-      .from('listings').select('*').eq('status', 'active').eq('geocoded', false);
+      .from('listings').select('*').eq('status', 'active');
 
     if (error) throw error;
     if (!listings || listings.length === 0)
@@ -286,7 +286,7 @@ app.post('/api/precompute-amenities', async (req, res) => {
         // Bus stop: estimate as 200m average (bus stops are ~200m apart in SG)
         const bus_distance_m = 200;
 
-        await supabase.from('listings').update({ lat: coords.lat, lng: coords.lng, geocoded: true }).eq('id', listing.id);
+        await supabase.from('listings').update({ lat: coords.lat, lng: coords.lng }).eq('id', listing.id);
 
         return {
           listing_id: listing.id,
@@ -369,16 +369,20 @@ app.post('/api/compute-scores', async (req, res) => {
 
   try {
     const { data: listings, error } = await supabase
-      .from('listings').select('*, listing_amenities(*)').eq('status', 'active');
+      .from('listings').select('*').eq('status', 'active');
     if (error) throw error;
+
+    const { data: amenityRows } = await supabase.from('listing_amenities').select('*');
+    const amenityMap = {};
+    (amenityRows || []).forEach(a => { amenityMap[a.listing_id] = a; });
 
     await supabase.from('lifestyle_scores').delete().eq('user_id', userId);
 
     const scores = listings.map(listing => {
-      const amenities = listing.listing_amenities?.[0] || {};
+      const amenities = amenityMap[listing.id] || {};
       const listingCoords = listing.lat && listing.lng ? { lat: listing.lat, lng: listing.lng } : null;
       const { score, breakdown } = computeScoreFromAmenities(
-        { ...amenities, num_bedrooms: listing.num_bedrooms }, profile, listingCoords
+        { ...amenities, num_bedrooms: listing.num_bedrooms, town: listing.town }, profile, listingCoords
       );
       return { user_id: userId, listing_id: listing.id, score, score_breakdown: breakdown, computed_at: new Date().toISOString() };
     });
@@ -386,6 +390,16 @@ app.post('/api/compute-scores', async (req, res) => {
     const { error: insertError } = await supabase
       .from('lifestyle_scores').upsert(scores, { onConflict: 'user_id,listing_id' });
     if (insertError) throw insertError;
+
+    // Auto-update compatibility_score in matches table
+    for (const s of scores) {
+      if (s.score !== undefined) {
+        await supabase.from('matches')
+          .update({ compatibility_score: s.score })
+          .eq('buyer_id', userId)
+          .eq('listing_id', s.listing_id);
+      }
+    }
 
     console.log(`Computed ${scores.length} scores instantly for user ${userId}`);
     res.json({ computed: scores.length, message: 'Scores computed!' });

@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { base44, supabase } from "@/api/base44Client";
 import { createPageUrl } from "../utils";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, Loader2, Heart, ChevronDown, ChevronUp, GitCompare } from "lucide-react";
+import { MessageSquare, Loader2, Heart, ChevronDown, ChevronUp, GitCompare, Bed, Maximize2, MapPin } from "lucide-react";
 import PropertyNotePanel from "@/components/matches/PropertyNotePanel";
 import ComparisonTool from "@/components/matches/ComparisonTool";
+import LifestyleMatchPanel from "@/components/swipe/LifestyleMatchPanel";
 
 export default function Matches() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [expandedNotes, setExpandedNotes] = useState(null);
   const [showComparison, setShowComparison] = useState(false);
 
@@ -27,10 +29,34 @@ export default function Matches() {
       } else {
         data = await base44.entities.Match.filter({ buyer_id: me.id });
       }
-      setMatches(data);
+      const sorted = (data || []).sort((a, b) => (b.compatibility_score ?? 0) - (a.compatibility_score ?? 0));
+
+      // Load profile + listing details + score breakdowns in parallel
+      const listingIds = sorted.map(m => m.listing_id).filter(Boolean);
+      const [profileRes, listingsRes, scoresRes] = await Promise.all([
+        base44.entities.LifestyleProfile.filter({ user_id: me.id }),
+        listingIds.length > 0 ? supabase.from('listings').select('*').in('id', listingIds) : { data: [] },
+        listingIds.length > 0 ? supabase.from('lifestyle_scores').select('listing_id, score_breakdown').eq('user_id', me.id).in('listing_id', listingIds) : { data: [] },
+      ]);
+
+      if (profileRes.length > 0) setProfile(profileRes[0]);
+
+      const listingMap = {};
+      (listingsRes.data || []).forEach(l => { listingMap[l.id] = l; });
+
+      const scoreMap = {};
+      (scoresRes.data || []).forEach(s => { scoreMap[s.listing_id] = s.score_breakdown; });
+
+      setMatches(sorted.map(m => ({
+        ...m,
+        listing: listingMap[m.listing_id] || null,
+        scoreBreakdown: scoreMap[m.listing_id] || {},
+      })));
       setLoading(false);
     };
     load();
+    window.addEventListener('focus', load);
+    return () => window.removeEventListener('focus', load);
   }, []);
 
   if (loading) {
@@ -90,14 +116,43 @@ export default function Matches() {
         <div className="space-y-3">
           {matches.map((match) => (
             <Card key={match.id} className="border-slate-100 overflow-hidden">
+              {isBuyer && match.listing && (
+                <div className="relative h-32 overflow-hidden">
+                  <img
+                    src={match.listing.photos?.[0] || "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&q=80"}
+                    alt={match.listing_title}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  <div className="absolute bottom-2 left-3 right-3">
+                    <p className="text-white font-semibold text-sm">{match.listing_title}</p>
+                    <p className="text-white/70 text-xs flex items-center gap-1 mt-0.5">
+                      <MapPin className="w-3 h-3" />{match.listing.address}
+                    </p>
+                  </div>
+                  <div className="absolute top-2 right-2 bg-orange-600/90 text-white text-xs font-bold px-2 py-1 rounded-full">
+                    {match.compatibility_score ?? "--"}% Match
+                  </div>
+                </div>
+              )}
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 font-bold text-sm flex-shrink-0">
-                    {match.compatibility_score || "--"}%
-                  </div>
+                  {(!isBuyer || !match.listing) && (
+                    <div className="w-11 h-11 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 font-bold text-sm flex-shrink-0">
+                      {match.compatibility_score ?? "--"}%
+                    </div>
+                  )}
                   <div>
                     <p className="font-medium text-slate-900">
-                      {isBuyer ? match.listing_title || "Property" : match.buyer_name || "Buyer"}
+                      {isBuyer ? (
+                        match.listing ? (
+                          <span className="flex items-center gap-3 text-sm text-slate-600">
+                            <span className="font-bold text-slate-900">${match.listing.price?.toLocaleString()}</span>
+                            <span className="flex items-center gap-1"><Bed className="w-3.5 h-3.5" />{match.listing.num_bedrooms} BR</span>
+                            {match.listing.floor_area_sqm && <span className="flex items-center gap-1"><Maximize2 className="w-3.5 h-3.5" />{match.listing.floor_area_sqm} sqm</span>}
+                          </span>
+                        ) : match.listing_title || "Property"
+                      ) : match.buyer_name || "Buyer"}
                     </p>
                     <div className="flex items-center gap-2 mt-0.5">
                       <Badge variant="secondary" className="text-xs capitalize">{match.status}</Badge>
@@ -123,6 +178,13 @@ export default function Matches() {
                   </Link>
                 </div>
               </div>
+
+              {/* Lifestyle match panel */}
+              {isBuyer && match.listing && profile && (
+                <div className="px-4 pb-3">
+                  <LifestyleMatchPanel listing={match.listing} profile={profile} scoreBreakdown={match.scoreBreakdown} />
+                </div>
+              )}
 
               {/* Notes panel */}
               {isBuyer && expandedNotes === match.id && (

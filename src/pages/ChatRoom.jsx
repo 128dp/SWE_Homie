@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import { base44, supabase } from "@/api/base44Client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send, ArrowLeft, Loader2 } from "lucide-react";
+import { Send, ArrowLeft, Loader2, Bed, Maximize2, MapPin } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "../utils";
 
@@ -11,6 +11,7 @@ export default function ChatRoom() {
   const [newMessage, setNewMessage] = useState("");
   const [user, setUser] = useState(null);
   const [match, setMatch] = useState(null);
+  const [listing, setListing] = useState(null);
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const bottomRef = useRef(null);
@@ -24,7 +25,13 @@ export default function ChatRoom() {
       setUser(me);
       if (matchId) {
         const matchData = await base44.entities.Match.filter({ id: matchId });
-        if (matchData.length > 0) setMatch(matchData[0]);
+        if (matchData.length > 0) {
+          setMatch(matchData[0]);
+          if (matchData[0].listing_id) {
+            const { data: l } = await supabase.from('listings').select('*').eq('id', matchData[0].listing_id).single();
+            if (l) setListing(l);
+          }
+        }
         const msgs = await base44.entities.ChatMessage.filter({ match_id: matchId });
         setMessages(msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
       }
@@ -73,18 +80,39 @@ export default function ChatRoom() {
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       {/* Header */}
-      <div className="flex items-center gap-3 pb-4 border-b mb-4">
-        <Link to={createPageUrl("Matches")}>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-        </Link>
-        <div>
-          <h2 className="font-semibold text-slate-900">{match?.listing_title || "Chat"}</h2>
-          <p className="text-xs text-slate-500">
-            {match?.compatibility_score}% compatibility · {user?.user_type === "agent" ? match?.buyer_name : "Property Agent"}
-          </p>
+      <div className="pb-4 border-b mb-4">
+        <div className="flex items-center gap-3 mb-3">
+          <Link to={createPageUrl("Matches")}>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+          </Link>
+          <div>
+            <h2 className="font-semibold text-slate-900">{match?.listing_title || "Chat"}</h2>
+            <p className="text-xs text-slate-500">
+              {match?.compatibility_score}% match · {user?.user_type === "agent" ? match?.buyer_name : "Property Agent"}
+            </p>
+          </div>
         </div>
+        {listing && (
+          <div className="flex gap-3 bg-slate-50 rounded-xl p-3 border border-slate-100">
+            <img
+              src={listing.photos?.[0] || "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&q=80"}
+              alt={listing.title}
+              className="w-20 h-16 object-cover rounded-lg flex-shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="font-bold text-slate-900">${listing.price?.toLocaleString()}</p>
+              <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                <MapPin className="w-3 h-3" />{listing.address}
+              </p>
+              <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                <span className="flex items-center gap-1"><Bed className="w-3 h-3" />{listing.num_bedrooms} BR</span>
+                {listing.floor_area_sqm && <span className="flex items-center gap-1"><Maximize2 className="w-3 h-3" />{listing.floor_area_sqm} sqm</span>}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Messages */}

@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { MapPin, Bed, Maximize2 } from "lucide-react";
 import LifestyleMatchPanel from "./LifestyleMatchPanel";
 
-export default function PropertyCard({ listing, lifeScore, profile }) {
+export default function PropertyCard({ listing, lifeScore, scoreBreakdown, profile }) {
   const typeLabels = {
     hdb: "HDB",
     condo: "Condo",
@@ -24,8 +24,23 @@ export default function PropertyCard({ listing, lifeScore, profile }) {
           </Badge>
         </div>
         <div className="absolute top-3 right-3">
-          <div className="bg-orange-700/90 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-sm font-bold">
-            {lifeScore || "--"}% Match
+          <div className="relative w-14 h-14 flex items-center justify-center">
+            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 56 56">
+              <circle cx="28" cy="28" r="23" fill="rgba(0,0,0,0.45)" stroke="rgba(255,255,255,0.15)" strokeWidth="4" />
+              <circle
+                cx="28" cy="28" r="23"
+                fill="none"
+                stroke={lifeScore >= 70 ? "#22c55e" : lifeScore >= 40 ? "#f97316" : "#ef4444"}
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 23}`}
+                strokeDashoffset={`${2 * Math.PI * 23 * (1 - (lifeScore || 0) / 100)}`}
+                style={{ transition: "stroke-dashoffset 0.6s ease" }}
+              />
+            </svg>
+            <span className="relative text-white font-bold text-xs leading-none text-center">
+              {lifeScore != null ? lifeScore : "--"}<br /><span className="font-normal opacity-80">%</span>
+            </span>
           </div>
         </div>
         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-4">
@@ -65,7 +80,7 @@ export default function PropertyCard({ listing, lifeScore, profile }) {
           </div>
         )}
 
-        <LifestyleMatchPanel listing={listing} profile={profile} />
+        <LifestyleMatchPanel listing={listing} profile={profile} scoreBreakdown={scoreBreakdown} />
       </div>
     </div>
   );

@@ -47,37 +47,37 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
-      <div className="w-full max-w-sm bg-slate-900 rounded-2xl p-8 border border-white/10">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="w-full max-w-sm bg-white rounded-2xl p-8 border border-slate-200 shadow-sm">
         <div className="flex items-center gap-2 mb-8">
           <div className="w-8 h-8 rounded-xl bg-orange-600 flex items-center justify-center">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M3 10.5L12 3L21 10.5V21H15V15H9V21H3V10.5Z" fill="white"/>
             </svg>
           </div>
-          <span className="font-bold text-xl text-white">Homie</span>
+          <span className="font-bold text-xl text-slate-900">Homie</span>
         </div>
 
-        <h2 className="text-xl font-bold text-white mb-1">{isSignUp ? 'Create account' : 'Welcome back'}</h2>
-        <p className="text-sm text-slate-400 mb-6">{isSignUp ? 'Start finding your perfect home' : 'Sign in to continue'}</p>
+        <h2 className="text-xl font-bold text-slate-900 mb-1">{isSignUp ? 'Create account' : 'Welcome back'}</h2>
+        <p className="text-sm text-slate-500 mb-6">{isSignUp ? 'Start finding your perfect home' : 'Sign in to continue'}</p>
 
         <div className="space-y-4">
           {isSignUp && (
             <div>
-              <Label className="text-slate-300 text-sm mb-1.5 block">Full Name</Label>
+              <Label className="text-slate-700 text-sm mb-1.5 block">Full Name</Label>
               <Input value={fullName} onChange={e => setFullName(e.target.value)}
-                placeholder="Your name" className="bg-slate-800 border-slate-700 text-white" />
+                placeholder="Your name" className="border-slate-200" />
             </div>
           )}
           <div>
-            <Label className="text-slate-300 text-sm mb-1.5 block">Email</Label>
+            <Label className="text-slate-700 text-sm mb-1.5 block">Email</Label>
             <Input value={email} onChange={e => setEmail(e.target.value)}
-              type="email" placeholder="you@email.com" className="bg-slate-800 border-slate-700 text-white" />
+              type="email" placeholder="you@email.com" className="border-slate-200" />
           </div>
           <div>
-            <Label className="text-slate-300 text-sm mb-1.5 block">Password</Label>
+            <Label className="text-slate-700 text-sm mb-1.5 block">Password</Label>
             <Input value={password} onChange={e => setPassword(e.target.value)}
-              type="password" placeholder="••••••••" className="bg-slate-800 border-slate-700 text-white"
+              type="password" placeholder="••••••••" className="border-slate-200"
               onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
           </div>
         </div>
@@ -88,18 +88,18 @@ export default function Login() {
         </Button>
 
         <div className="relative my-4">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-700" /></div>
-          <div className="relative flex justify-center"><span className="bg-slate-900 px-3 text-xs text-slate-500">or</span></div>
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
+          <div className="relative flex justify-center"><span className="bg-white px-3 text-xs text-slate-400">or</span></div>
         </div>
 
         <Button onClick={handleGoogle} variant="outline"
-          className="w-full border-slate-700 text-slate-300 hover:bg-slate-800 h-11">
+          className="w-full border-slate-200 text-slate-700 hover:bg-slate-50 h-11">
           Continue with Google
         </Button>
 
         <p className="text-center text-sm text-slate-500 mt-5">
           {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
-          <button onClick={() => setIsSignUp(!isSignUp)} className="text-orange-400 hover:text-orange-300 font-medium">
+          <button onClick={() => setIsSignUp(!isSignUp)} className="text-orange-600 hover:text-orange-500 font-medium">
             {isSignUp ? 'Sign in' : 'Sign up'}
           </button>
         </p>

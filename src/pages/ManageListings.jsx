@@ -61,13 +61,13 @@ export default function ManageListings() {
       return;
     }
     setSaving(true);
+    const { photos, ...formData } = form;
     const data = {
-      ...form,
+      ...formData,
       price: Number(form.price),
       num_bedrooms: Number(form.num_bedrooms),
       floor_area_sqm: form.floor_area_sqm ? Number(form.floor_area_sqm) : undefined,
       agent_id: user.id,
-      agent_name: user.full_name || user.email,
       status: "active",
     };
 
