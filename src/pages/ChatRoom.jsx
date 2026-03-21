@@ -26,7 +26,7 @@ export default function ChatRoom() {
         const matchData = await base44.entities.Match.filter({ id: matchId });
         if (matchData.length > 0) setMatch(matchData[0]);
         const msgs = await base44.entities.ChatMessage.filter({ match_id: matchId });
-        setMessages(msgs.sort((a, b) => new Date(a.created_date) - new Date(b.created_date)));
+        setMessages(msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
       }
       setLoading(false);
     };
@@ -38,7 +38,7 @@ export default function ChatRoom() {
     if (!matchId) return;
     const interval = setInterval(async () => {
       const msgs = await base44.entities.ChatMessage.filter({ match_id: matchId });
-      setMessages(msgs.sort((a, b) => new Date(a.created_date) - new Date(b.created_date)));
+      setMessages(msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
     }, 5000);
     return () => clearInterval(interval);
   }, [matchId]);
@@ -52,14 +52,13 @@ export default function ChatRoom() {
     setSending(true);
     await base44.entities.ChatMessage.create({
       match_id: matchId,
-      sender_id: user.id,
+      user_id: user.id,
       sender_name: user.full_name || user.email,
-      text_content: newMessage.trim(),
-      sender_role: user.user_type === "agent" ? "agent" : "buyer",
+      content: newMessage.trim(),
     });
     setNewMessage("");
     const msgs = await base44.entities.ChatMessage.filter({ match_id: matchId });
-    setMessages(msgs.sort((a, b) => new Date(a.created_date) - new Date(b.created_date)));
+    setMessages(msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
     setSending(false);
   };
 
@@ -96,7 +95,7 @@ export default function ChatRoom() {
           </div>
         )}
         {messages.map((msg) => {
-          const isMe = msg.sender_id === user?.id;
+          const isMe = msg.user_id === user?.id;
           return (
             <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm ${
@@ -105,7 +104,7 @@ export default function ChatRoom() {
                   : "bg-slate-100 text-slate-800 rounded-bl-md"
               }`}>
                 {!isMe && <p className="text-xs font-medium text-slate-500 mb-1">{msg.sender_name}</p>}
-                <p>{msg.text_content}</p>
+                <p>{msg.content}</p>
               </div>
             </div>
           );

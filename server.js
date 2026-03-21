@@ -405,12 +405,12 @@ Keep answers to 3-5 sentences max. Be warm and direct.\n\n`;
     else fullPrompt += `User: ${prompt}`;
 
     const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: fullPrompt }] }], generationConfig: { maxOutputTokens: 500 } }) }
+      'https://api.groq.com/openai/v1/chat/completions',
+      { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+        body: JSON.stringify({ model: 'meta-llama/llama-4-scout-17b-16e-instruct', messages: [{ role: 'user', content: fullPrompt }], max_tokens: 500 }) }
     );
     const data = await r.json();
-    res.json({ reply: data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, could not generate a response.' });
+    res.json({ reply: data.choices?.[0]?.message?.content || 'Sorry, could not generate a response.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

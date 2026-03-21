@@ -69,24 +69,32 @@ export default function SwipeDiscover() {
     if (!listing) return;
     setSwipeDir(direction);
 
-    await base44.entities.Swipe.create({
-      user_id: user.id,
-      listing_id: listing.id,
-      direction,
-    });
+    try {
+      await base44.entities.Swipe.create({
+        user_id: user.id,
+        listing_id: listing.id,
+        direction,
+      });
+    } catch {
+      // duplicate swipe — ignore and continue
+    }
 
     if (direction === "right") {
-      const score = listing.lifeScore || 50;
-      await base44.entities.Match.create({
-        buyer_id: user.id,
-        listing_id: listing.id,
-        agent_id: listing.agent_id || "",
-        compatibility_score: score,
-        listing_title: listing.title,
-        buyer_name: user.full_name || user.email,
-        status: "active",
-      });
-      toast.success("Match created! Check your Matches tab to chat.");
+      try {
+        const score = listing.lifeScore || 50;
+        await base44.entities.Match.create({
+          buyer_id: user.id,
+          listing_id: listing.id,
+          agent_id: listing.agent_id || "",
+          compatibility_score: score,
+          listing_title: listing.title,
+          buyer_name: user.full_name || user.email,
+          status: "active",
+        });
+        toast.success("Match created! Check your Matches tab to chat.");
+      } catch {
+        // duplicate match — ignore
+      }
     }
 
     setTimeout(() => {
