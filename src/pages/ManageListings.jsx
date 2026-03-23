@@ -13,6 +13,10 @@ import {
 import { Plus, Pencil, Trash2, Loader2, Building2, MapPin, Eye, Heart } from "lucide-react";
 import { supabase } from "@/api/apiClient";
 import { toast } from "sonner";
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Navigation } from "swiper/modules";
+import "swiper/css";
+import "swiper/css/navigation";
 
 const LIFESTYLE_TAG_OPTIONS = [
   "near_mrt", "quiet", "greenery", "near_schools", "near_mall",
@@ -161,6 +165,7 @@ export default function ManageListings() {
     const { photos, ...formData } = form;
     const data = {
       ...formData,
+      photos: form.photos,
       price: Number(form.price),
       num_bedrooms: Number(form.num_bedrooms),
       floor_area_sqm: form.floor_area_sqm ? Number(form.floor_area_sqm) : undefined,
@@ -230,10 +235,51 @@ export default function ManageListings() {
   };
 
   const handlePhotoUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const { file_url } = await api.integrations.Core.UploadFile({ file });
-    setForm((f) => ({ ...f, photos: [...f.photos, file_url] }));
+    const files = Array.from(e.target.files);
+  
+    for (const file of files) {
+      const { file_url } = await api.integrations.Core.UploadFile({ file });
+  
+      setForm((f) => ({
+        ...f,
+        photos: [...f.photos, file_url],
+      }));
+    }
+  };
+
+  const removePhoto = async (index) => {
+    const url = form.photos[index];
+  
+    console.log("Deleting URL:", url);
+  
+    try {
+      const path = getPathFromUrl(url);
+      console.log("Extracted path:", path);
+  
+      const { data, error } = await supabase.storage
+        .from("uploads")
+        .remove([path]);
+  
+      console.log("Delete response:", data, error);
+  
+      if (error) {
+        throw error;
+      }
+  
+      setForm((f) => ({
+        ...f,
+        photos: f.photos.filter((_, i) => i !== index),
+      }));
+  
+    } catch (err) {
+      console.error("Failed to delete photo:", err);
+      toast.error("Failed to delete photo");
+    }
+  };
+
+  const getPathFromUrl = (url) => {
+    const parts = url.split("/uploads/");
+    return parts[1]; // removes "uploads/"
   };
 
   const typeLabels = { hdb: "HDB", condo: "Condo", landed: "Landed", executive_condo: "EC" };
@@ -350,11 +396,21 @@ export default function ManageListings() {
               </div>
               <div>
                 <Label className="text-sm mb-1 block">Photos</Label>
-                <input type="file" accept="image/*" onChange={handlePhotoUpload} className="text-sm" />
+                <input type="file" accept="image/*" multiple onChange={handlePhotoUpload} className="text-sm" />
                 {form.photos.length > 0 && (
                   <div className="flex gap-2 mt-2 flex-wrap">
                     {form.photos.map((url, i) => (
-                      <img key={i} src={url} alt="" className="w-16 h-16 rounded-lg object-cover" />
+                      <div key={i} className="relative">
+                        <img src={url} className="w-16 h-16 rounded-lg object-cover" />
+                        
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(i)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full"
+                        >
+                          ✕
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -382,9 +438,41 @@ export default function ManageListings() {
         <div className="grid sm:grid-cols-2 gap-4">
           {listings.map((listing) => (
             <Card key={listing.id} className="border-slate-100 overflow-hidden">
-              {listing.photos?.[0] && (
-                <img src={listing.photos[0]} alt="" className="w-full h-40 object-cover" />
+              
+              {listing.photos?.length > 0 && (
+                <div className="relative h-40 w-full overflow-hidden">
+                  <Swiper
+                    modules={[Navigation]}
+                    navigation
+                    slidesPerView={1}
+                    className="w-full h-full"
+                  >
+                    {listing.photos.map((url, idx) => (
+                      <SwiperSlide key={idx}>
+                        <img
+                          src={url}
+                          alt={`photo-${idx}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </SwiperSlide>
+                    ))}
+                  </Swiper>
+
+                  {/* optional overlay (for consistency with other pages) */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
+
+                  <div className="absolute bottom-2 left-3 right-3 z-10">
+                    <p className="text-white font-semibold text-sm line-clamp-1">
+                      {listing.title}
+                    </p>
+                    <p className="text-white/70 text-xs flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {listing.address}
+                    </p>
+                  </div>
+                </div>
               )}
+
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div>

@@ -16,6 +16,7 @@ export default function BuyerDashboard() {
   const [profile, setProfile] = useState(null);
   const [topMatch, setTopMatch] = useState(null);
   const [topMatchBreakdown, setTopMatchBreakdown] = useState({});
+  const [unreadMatches, setUnreadMatches] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -27,6 +28,29 @@ export default function BuyerDashboard() {
         api.entities.Match.filter({ buyer_id: me.id }),
         api.entities.Swipe.filter({ user_id: me.id }),
       ]);
+
+      const matchIds = matches.map(m => m.id);
+
+      if (matchIds.length > 0) {
+        const { data: lastMsgs } = await supabase
+          .from('chat_messages')
+          .select('match_id, user_id, created_at')
+          .in('match_id', matchIds)
+          .order('created_at', { ascending: false });
+
+        const seen = new Set();
+        let unread = 0;
+
+        for (const msg of (lastMsgs || [])) {
+          if (!seen.has(msg.match_id)) {
+            seen.add(msg.match_id);
+
+            if (msg.user_id !== me.id) unread++;
+          }
+        }
+
+        setUnreadMatches(unread);
+      }
 
       setMatchCount(matches.length);
       setSwipeCount(swipes.length);
@@ -90,7 +114,9 @@ export default function BuyerDashboard() {
     },
     {
       title: "Your Matches",
-      desc: `${matchCount} active match${matchCount !== 1 ? "es" : ""}`,
+      desc: unreadMatches > 0
+    ? `${unreadMatches} new message${unreadMatches !== 1 ? "s" : ""}`
+    : `${matchCount} active match${matchCount !== 1 ? "es" : ""}`,
       icon: MessageSquare,
       page: "Matches",
       bgColor: "bg-indigo-50",
@@ -181,6 +207,23 @@ export default function BuyerDashboard() {
         </div>
       )}
 
+      {/* Unread messages alert */}
+      {unreadMatches > 0 && (
+        <div className="mb-5 flex items-center justify-between bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-orange-600" />
+            <p className="text-sm font-medium text-orange-800">
+              {unreadMatches} {unreadMatches === 1 ? "conversation" : "conversations"} waiting for your reply
+            </p>
+          </div>
+          <Link to={createPageUrl("Matches")}>
+            <Button size="sm" className="bg-orange-600 hover:bg-orange-500 h-7 text-xs">
+              Reply
+            </Button>
+          </Link>
+        </div>
+      )}
+
       {/* Quick actions */}
       <div className="grid sm:grid-cols-3 gap-4">
         {quickActions.map((action) => (
@@ -188,7 +231,16 @@ export default function BuyerDashboard() {
             <Card className={`p-5 hover:shadow-md transition-all cursor-pointer group border-slate-100 h-full ${action.alert ? "border-amber-200 bg-amber-50/30" : ""}`}>
               <div className={`w-10 h-10 rounded-xl ${action.bgColor} flex items-center justify-center mb-4 relative`}>
                 <action.icon className={`w-5 h-5 ${action.iconColor}`} />
-                {action.alert && (
+
+                {/* Notification badge */}
+                {action.page === "Matches" && unreadMatches > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-orange-500 text-white text-[10px] flex items-center justify-center">
+                    {unreadMatches}
+                  </span>
+                )}
+
+                {/* Existing alert dot (for profile gaps) */}
+                {action.alert && action.page !== "Matches" && (
                   <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-500 border-2 border-white" />
                 )}
               </div>

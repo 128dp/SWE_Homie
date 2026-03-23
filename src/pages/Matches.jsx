@@ -9,6 +9,10 @@ import { MessageSquare, Loader2, Heart, ChevronDown, ChevronUp, GitCompare, Bed,
 import PropertyNotePanel from "@/components/matches/PropertyNotePanel";
 import ComparisonTool from "@/components/matches/ComparisonTool";
 import LifestyleMatchPanel from "@/components/swipe/LifestyleMatchPanel";
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Navigation } from "swiper/modules";
+import "swiper/css";
+import "swiper/css/navigation";
 
 export default function Matches() {
   const [matches, setMatches] = useState([]);
@@ -33,6 +37,28 @@ export default function Matches() {
 
       // Load profile + listing details + score breakdowns in parallel
       const listingIds = sorted.map(m => m.listing_id).filter(Boolean);
+
+      const matchIds = sorted.map(m => m.id);
+
+      let lastMessageMap = {};
+
+      if (matchIds.length > 0) {
+        const { data: lastMsgs } = await supabase
+          .from('chat_messages')
+          .select('match_id, user_id, created_at')
+          .in('match_id', matchIds)
+          .order('created_at', { ascending: false });
+
+        const seen = new Set();
+
+        for (const msg of (lastMsgs || [])) {
+          if (!seen.has(msg.match_id)) {
+            seen.add(msg.match_id);
+            lastMessageMap[msg.match_id] = msg;
+          }
+        }
+      }
+
       const [profileRes, listingsRes, scoresRes] = await Promise.all([
         api.entities.LifestyleProfile.filter({ user_id: me.id }),
         listingIds.length > 0 ? supabase.from('listings').select('*').in('id', listingIds) : { data: [] },
@@ -47,11 +73,16 @@ export default function Matches() {
       const scoreMap = {};
       (scoresRes.data || []).forEach(s => { scoreMap[s.listing_id] = s.score_breakdown; });
 
-      setMatches(sorted.map(m => ({
-        ...m,
-        listing: listingMap[m.listing_id] || null,
-        scoreBreakdown: scoreMap[m.listing_id] || {},
-      })));
+      setMatches(sorted.map(m => {
+        const lastMsg = lastMessageMap[m.id];
+      
+        return {
+          ...m,
+          listing: listingMap[m.listing_id] || null,
+          scoreBreakdown: scoreMap[m.listing_id] || {},
+          hasUnread: lastMsg && lastMsg.user_id !== me.id,
+        };
+      }));
       setLoading(false);
     };
     load();
@@ -115,22 +146,39 @@ export default function Matches() {
       ) : (
         <div className="space-y-3">
           {matches.map((match) => (
-            <Card key={match.id} className="border-slate-100 overflow-hidden">
+            <Card
+              key={match.id}
+              className={`border-slate-100 overflow-hidden ${
+                match.hasUnread ? "ring-2 ring-orange-200" : ""
+              }`}
+            >
               {isBuyer && match.listing && (
                 <div className="relative h-32 overflow-hidden">
-                  <img
-                    src={match.listing.photos?.[0] || "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&q=80"}
-                    alt={match.listing_title}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  <div className="absolute bottom-2 left-3 right-3">
-                    <p className="text-white font-semibold text-sm">{match.listing_title}</p>
+                  <Swiper
+                    modules={[Navigation]}
+                    navigation
+                    slidesPerView={1}
+                    className="w-full h-full"
+                  >
+                    {(match.listing.photos?.length
+                      ? match.listing.photos
+                      : ["https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&q=80"]
+                    ).map((url, idx) => (
+                      <SwiperSlide key={idx}>
+                        <img src={url} alt={`photo-${idx}`} className="w-full h-full object-cover" />
+                      </SwiperSlide>
+                    ))}
+                  </Swiper>
+
+                  {/* These need z-index above Swiper's stacking context */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10 pointer-events-none" />
+                  <div className="absolute bottom-2 left-3 right-3 z-10 pointer-events-none">
+                    <p className="text-white font-semibold text-sm">{match.listing?.title || "Property"}</p>
                     <p className="text-white/70 text-xs flex items-center gap-1 mt-0.5">
-                      <MapPin className="w-3 h-3" />{match.listing.address}
+                      <MapPin className="w-3 h-3" />{match.listing?.address || "Address unavailable"}
                     </p>
                   </div>
-                  <div className="absolute top-2 right-2">
+                  <div className="absolute top-2 right-2 z-10">
                     <div className="relative w-14 h-14 flex items-center justify-center">
                       <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 56 56">
                         <circle cx="28" cy="28" r="23" fill="rgba(0,0,0,0.45)" stroke="rgba(255,255,255,0.15)" strokeWidth="4" />
@@ -198,7 +246,16 @@ export default function Matches() {
                     </div>
                   </div>
                 </div>
+
                 <div className="flex items-center gap-2">
+                  {match.hasUnread && (
+                    <span className="flex items-center gap-1 text-sm text-orange-600 font-medium">
+                      NEW
+                      <span className="w-2 h-2 rounded-full bg-orange-500" />
+                    </span>
+                  )}
+
+
                   {isBuyer && (
                     <Button
                       variant="ghost"
