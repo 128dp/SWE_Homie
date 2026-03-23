@@ -1,5 +1,5 @@
 import React from "react";
-import { CheckCircle2, XCircle, MapPin } from "lucide-react";
+import { CheckCircle2, XCircle, MapPin, MinusCircle } from "lucide-react";
 
 const TAG_MAP = {
   mrt: "mrt", near_mrt: "mrt",
@@ -38,8 +38,47 @@ export default function LifestyleMatchPanel({ listing, profile, scoreBreakdown }
   const hasImportantPlaces = profile.important_places?.length > 0;
   if (enabledPrefs.length === 0 && !hasImportantPlaces) return null;
 
+  const budgetBreakdown = scoreBreakdown?.budget;
+  const locationBreakdown = scoreBreakdown?.location;
+  const hasPriorityBreakdown = budgetBreakdown || locationBreakdown;
+
   return (
     <div className="mt-3 border border-slate-100 rounded-xl p-3 bg-slate-50 space-y-3">
+      {/* Budget + Location (priority criteria) */}
+      {hasPriorityBreakdown && (
+        <div>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Hard Criteria</p>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            {budgetBreakdown && (
+              <div className="flex items-center gap-1.5">
+                {budgetBreakdown.status === 'full' ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                ) : budgetBreakdown.status === 'partial' ? (
+                  <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                )}
+                <span className={`text-xs ${budgetBreakdown.status !== 'none' ? "text-slate-700" : "text-slate-400"}`}>
+                  Budget {budgetBreakdown.status === 'partial' ? "(close)" : ""}
+                </span>
+              </div>
+            )}
+            {locationBreakdown && (
+              <div className="flex items-center gap-1.5">
+                {locationBreakdown.status === 'full' ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                )}
+                <span className={`text-xs ${locationBreakdown.status !== 'none' ? "text-slate-700" : "text-slate-400"}`}>
+                  Location
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Amenity matches */}
       {enabledPrefs.length > 0 && (
         <div>
@@ -47,17 +86,20 @@ export default function LifestyleMatchPanel({ listing, profile, scoreBreakdown }
           <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
             {enabledPrefs.map((key) => {
               const breakdown = scoreBreakdown?.[key];
+              const noData = breakdown && breakdown.minutes === null;
               const matched = breakdown ? breakdown.status !== "none" : propertyMatchesAmenity(listing, key);
               const minutes = breakdown?.minutes;
               return (
                 <div key={key} className="flex items-center gap-1.5">
-                  {matched ? (
+                  {noData ? (
+                    <MinusCircle className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                  ) : matched ? (
                     <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
                   ) : (
                     <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
                   )}
-                  <span className={`text-xs ${matched ? "text-slate-700" : "text-slate-400"}`}>
-                    {AMENITY_LABELS[key]}{minutes != null ? ` (${minutes}min)` : ""}
+                  <span className={`text-xs ${noData ? "text-slate-300" : matched ? "text-slate-700" : "text-slate-400"}`}>
+                    {AMENITY_LABELS[key]}{minutes != null ? ` (${minutes}min)` : noData ? " (no data)" : ""}
                   </span>
                 </div>
               );

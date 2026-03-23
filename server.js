@@ -185,6 +185,43 @@ function computeScoreFromAmenities(amenities, profile, listingCoords) {
     { key: 'polyclinic',  distKey: 'polyclinic_distance_m',  nameKey: 'polyclinic_name',  label: 'Polyclinic',    mode: profile.polyclinic_mode || 'commute' },
   ];
 
+  // ── Budget match (2x weight) ──────────────────────────────────────────────
+  if (profile.budget_max && amenities.price) {
+    const weight = 2;
+    totalCriteria += weight;
+    const price = amenities.price;
+    const min = profile.budget_min ?? 0;
+    const max = profile.budget_max;
+    const overBy = price - max;
+    const underBy = min - price;
+    if (price >= min && price <= max) {
+      totalPoints += weight;
+      breakdown.budget = { label: 'Budget', status: 'full', points: weight };
+    } else if (overBy > 0 && overBy / max <= 0.1) {
+      // within 10% over budget — partial
+      totalPoints += weight * 0.5;
+      breakdown.budget = { label: 'Budget', status: 'partial', points: weight * 0.5 };
+    } else if (underBy > 0 && underBy / min <= 0.1) {
+      // within 10% under min — partial
+      totalPoints += weight * 0.5;
+      breakdown.budget = { label: 'Budget', status: 'partial', points: weight * 0.5 };
+    } else {
+      breakdown.budget = { label: 'Budget', status: 'none', points: 0 };
+    }
+  }
+
+  // ── Location match (2x weight) ────────────────────────────────────────────
+  if (profile.preferred_towns?.length > 0 && amenities.town) {
+    const weight = 2;
+    totalCriteria += weight;
+    if (profile.preferred_towns.includes(amenities.town)) {
+      totalPoints += weight;
+      breakdown.location = { label: 'Location', status: 'full', points: weight };
+    } else {
+      breakdown.location = { label: 'Location', status: 'none', points: 0 };
+    }
+  }
+
   // Bedroom match
   if (profile.num_bedrooms) {
     totalCriteria++;
@@ -197,7 +234,6 @@ function computeScoreFromAmenities(amenities, profile, listingCoords) {
   // Amenity checks
   for (const amenity of AMENITY_MAP) {
     if (!profile[`${amenity.key}_enabled`]) continue;
-    totalCriteria++;
 
     const distanceM = amenities[amenity.distKey];
     const name = amenity.nameKey ? amenities[amenity.nameKey] : amenity.label;
@@ -206,8 +242,10 @@ function computeScoreFromAmenities(amenities, profile, listingCoords) {
 
     if (distanceM == null) {
       breakdown[amenity.key] = { label: amenity.label, status: 'none', points: 0, minutes: null };
-      continue;
+      continue; // skip — no data, don't penalise
     }
+
+    totalCriteria++;
 
     const minutes = distanceToMinutes(distanceM, amenity.mode);
     if (minutes <= threshold) {
@@ -322,8 +360,9 @@ app.post('/api/precompute-amenities', async (req, res) => {
 // ─── POST /api/precompute-single-listing ─────────────────────────────────────
 // Called when agent adds a new listing
 app.post('/api/precompute-single-listing', async (req, res) => {
-  const { listingId } = req.body;
-  if (!listingId) return res.status(400).json({ error: 'Missing listingId' });
+  const { listing_id, listingId: listingIdAlt } = req.body;
+  const listingId = listing_id || listingIdAlt;
+  if (!listingId) return res.status(400).json({ error: 'Missing listing_id' });
 
   try {
     const { data: listing } = await supabase.from('listings').select('*').eq('id', listingId).single();
@@ -355,7 +394,21 @@ app.post('/api/precompute-single-listing', async (req, res) => {
     }, { onConflict: 'listing_id' });
 
     if (error) throw error;
-    res.json({ success: true, message: 'Listing amenities computed!' });
+
+    // Compute scores for all existing buyer profiles for this new listing
+    const { data: profiles } = await supabase.from('lifestyle_profiles').select('*');
+    const { data: amenityRow } = await supabase.from('listing_amenities').select('*').eq('listing_id', listingId).single();
+    const listingCoords = coords;
+    for (const profile of (profiles || [])) {
+      const amenities = { ...amenityRow, num_bedrooms: listing.num_bedrooms, town: listing.town, price: listing.price };
+      const { score, breakdown } = computeScoreFromAmenities(amenities, profile, listingCoords);
+      await supabase.from('lifestyle_scores').upsert(
+        { user_id: profile.user_id, listing_id: listingId, score, score_breakdown: breakdown },
+        { onConflict: 'user_id,listing_id' }
+      );
+    }
+
+    res.json({ success: true, message: 'Listing amenities computed and scores updated!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -382,7 +435,7 @@ app.post('/api/compute-scores', async (req, res) => {
       const amenities = amenityMap[listing.id] || {};
       const listingCoords = listing.lat && listing.lng ? { lat: listing.lat, lng: listing.lng } : null;
       const { score, breakdown } = computeScoreFromAmenities(
-        { ...amenities, num_bedrooms: listing.num_bedrooms, town: listing.town }, profile, listingCoords
+        { ...amenities, num_bedrooms: listing.num_bedrooms, town: listing.town, price: listing.price }, profile, listingCoords
       );
       return { user_id: userId, listing_id: listing.id, score, score_breakdown: breakdown, computed_at: new Date().toISOString() };
     });

@@ -40,14 +40,21 @@ export default function ChatRoom() {
     load();
   }, [matchId]);
 
-  // Poll for new messages
+  // Real-time messages via Supabase subscription
   useEffect(() => {
     if (!matchId) return;
-    const interval = setInterval(async () => {
-      const msgs = await base44.entities.ChatMessage.filter({ match_id: matchId });
-      setMessages(msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
-    }, 5000);
-    return () => clearInterval(interval);
+    const channel = supabase
+      .channel(`chat:${matchId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `match_id=eq.${matchId}` },
+        (payload) => {
+          setMessages((prev) => {
+            if (prev.find(m => m.id === payload.new.id)) return prev;
+            return [...prev, payload.new].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+          });
+        }
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
   }, [matchId]);
 
   useEffect(() => {
@@ -57,15 +64,32 @@ export default function ChatRoom() {
   const handleSend = async () => {
     if (!newMessage.trim()) return;
     setSending(true);
-    await base44.entities.ChatMessage.create({
+    const content = newMessage.trim();
+    setNewMessage("");
+
+    // Optimistically show immediately on sender's side
+    const optimistic = {
+      id: `optimistic-${Date.now()}`,
       match_id: matchId,
       user_id: user.id,
       sender_name: user.full_name || user.email,
-      content: newMessage.trim(),
+      content,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimistic]);
+
+    const created = await base44.entities.ChatMessage.create({
+      match_id: matchId,
+      user_id: user.id,
+      sender_name: user.full_name || user.email,
+      content,
     });
-    setNewMessage("");
-    const msgs = await base44.entities.ChatMessage.filter({ match_id: matchId });
-    setMessages(msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+
+    // Replace optimistic with real record once saved
+    if (created?.id) {
+      setMessages((prev) => prev.map(m => m.id === optimistic.id ? { ...optimistic, id: created.id } : m));
+    }
+
     setSending(false);
   };
 

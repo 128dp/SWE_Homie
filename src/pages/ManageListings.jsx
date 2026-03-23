@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Loader2, Building2, MapPin } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Building2, MapPin, Eye, Heart } from "lucide-react";
+import { supabase } from "@/api/base44Client";
 import { toast } from "sonner";
 
 const LIFESTYLE_TAG_OPTIONS = [
@@ -39,11 +40,24 @@ export default function ManageListings() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
+  const [swipeStats, setSwipeStats] = useState({});
 
   const loadListings = async (userId) => {
     const data = await base44.entities.PropertyListing.filter({ agent_id: userId });
     setListings(data);
     setLoading(false);
+
+    if (data.length > 0) {
+      const ids = data.map(l => l.id);
+      const { data: swipes } = await supabase.from('swipes').select('listing_id, direction').in('listing_id', ids);
+      const stats = {};
+      for (const s of (swipes || [])) {
+        if (!stats[s.listing_id]) stats[s.listing_id] = { views: 0, likes: 0 };
+        stats[s.listing_id].views++;
+        if (s.direction === 'right') stats[s.listing_id].likes++;
+      }
+      setSwipeStats(stats);
+    }
   };
 
   useEffect(() => {
@@ -91,7 +105,8 @@ export default function ManageListings() {
     await loadListings(user.id);
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id, title) => {
+    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
     await base44.entities.PropertyListing.delete(id);
     toast.success("Listing deleted");
     await loadListings(user.id);
@@ -273,11 +288,19 @@ export default function ManageListings() {
                   </Badge>
                 </div>
                 <p className="font-bold text-lg mt-2">${listing.price?.toLocaleString()}</p>
+                <div className="flex items-center gap-3 mt-2">
+                  <span className="flex items-center gap-1 text-xs text-slate-400">
+                    <Eye className="w-3.5 h-3.5" />{swipeStats[listing.id]?.views ?? 0} views
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-orange-500 font-medium">
+                    <Heart className="w-3.5 h-3.5" />{swipeStats[listing.id]?.likes ?? 0} likes
+                  </span>
+                </div>
                 <div className="flex gap-2 mt-3">
                   <Button size="sm" variant="outline" onClick={() => openEdit(listing)} className="gap-1">
                     <Pencil className="w-3 h-3" /> Edit
                   </Button>
-                  <Button size="sm" variant="outline" className="text-red-600 hover:bg-red-50 gap-1" onClick={() => handleDelete(listing.id)}>
+                  <Button size="sm" variant="outline" className="text-red-600 hover:bg-red-50 gap-1" onClick={() => handleDelete(listing.id, listing.title)}>
                     <Trash2 className="w-3 h-3" /> Delete
                   </Button>
                 </div>

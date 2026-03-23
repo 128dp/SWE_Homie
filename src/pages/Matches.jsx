@@ -182,7 +182,16 @@ export default function Matches() {
                             {match.listing.floor_area_sqm && <span className="flex items-center gap-1"><Maximize2 className="w-3.5 h-3.5" />{match.listing.floor_area_sqm} sqm</span>}
                           </span>
                         ) : match.listing_title || "Property"
-                      ) : match.buyer_name || "Buyer"}
+                      ) : (
+                        <span className="flex flex-col gap-0.5">
+                          <span>{match.buyer_name || "Buyer"}</span>
+                          {match.listing_title && (
+                            <span className="text-xs text-slate-400 font-normal flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />{match.listing_title}
+                            </span>
+                          )}
+                        </span>
+                      )}
                     </p>
                     <div className="flex items-center gap-2 mt-0.5">
                       <Badge variant="secondary" className="text-xs capitalize">{match.status}</Badge>
