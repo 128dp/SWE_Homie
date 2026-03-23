@@ -93,16 +93,19 @@ export default function SwipeDiscover() {
 
     if (direction === "right") {
       try {
-        await base44.entities.Match.create({
-          buyer_id: user.id,
-          listing_id: listing.id,
-          agent_id: listing.agent_id || null,
-          compatibility_score: listing.lifeScore || 50,
-          listing_title: listing.title,
-          buyer_name: user.full_name || user.email,
-          status: "active",
-        });
-        toast.success("Match created! Check your Matches tab.");
+        const existing = await base44.entities.Match.filter({ buyer_id: user.id, listing_id: listing.id });
+        if (!existing || existing.length === 0) {
+          await base44.entities.Match.create({
+            buyer_id: user.id,
+            listing_id: listing.id,
+            agent_id: listing.agent_id || null,
+            compatibility_score: listing.lifeScore || 50,
+            listing_title: listing.title,
+            buyer_name: user.full_name || user.email,
+            status: "active",
+          });
+          toast.success("Match created! Check your Matches tab.");
+        }
       } catch {}
     }
 

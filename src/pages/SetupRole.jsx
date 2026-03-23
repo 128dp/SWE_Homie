@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "../utils";
 import { Button } from "@/components/ui/button";
-import { Home, Building2, Key, Sparkles } from "lucide-react";
+import { Home, Building2, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function SetupRole() {
@@ -29,7 +29,6 @@ export default function SetupRole() {
 
   const roles = [
     { key: "buyer", label: "Buyer", desc: "I'm looking to purchase a property", icon: Home, color: "from-orange-500 to-amber-500" },
-    { key: "renter", label: "Renter", desc: "I'm looking to rent a place", icon: Key, color: "from-emerald-500 to-teal-500" },
     { key: "agent", label: "Property Agent", desc: "I list properties for sale or rent", icon: Building2, color: "from-amber-500 to-orange-500" },
   ];
 

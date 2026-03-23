@@ -75,8 +75,13 @@ export default function ManageListings() {
       await base44.entities.PropertyListing.update(editing.id, data);
       toast.success("Listing updated");
     } else {
-      await base44.entities.PropertyListing.create(data);
-      toast.success("Listing created");
+      const created = await base44.entities.PropertyListing.create(data);
+      toast.success("Listing created — computing amenities...");
+      fetch("/api/precompute-single-listing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listing_id: created.id }),
+      }).catch(() => {});
     }
 
     setDialogOpen(false);
