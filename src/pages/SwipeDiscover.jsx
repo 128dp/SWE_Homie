@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44, supabase } from "@/api/base44Client";
+import { api, supabase } from "@/api/apiClient";
 import { Button } from "@/components/ui/button";
 import { X, Heart, Loader2, SlidersHorizontal, MapPin, DollarSign, Brain } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,16 +23,16 @@ export default function SwipeDiscover() {
 
   useEffect(() => {
     const load = async () => {
-      const me = await base44.auth.me();
+      const me = await api.auth.me();
       setUser(me);
-      const profiles = await base44.entities.LifestyleProfile.filter({ user_id: me.id });
+      const profiles = await api.entities.LifestyleProfile.filter({ user_id: me.id });
       const userProfile = profiles[0] || null;
       if (userProfile) setProfile(userProfile);
 
-      const swipes = await base44.entities.Swipe.filter({ user_id: me.id });
+      const swipes = await api.entities.Swipe.filter({ user_id: me.id });
       const swipedSet = new Set(swipes.map((s) => s.listing_id));
 
-      const allListings = await base44.entities.PropertyListing.filter({ status: "active" });
+      const allListings = await api.entities.PropertyListing.filter({ status: "active" });
       const unswiped = allListings.filter((l) => !swipedSet.has(l.id));
 
       // Hard criteria
@@ -88,14 +88,14 @@ export default function SwipeDiscover() {
     setSwipeDir(direction);
 
     try {
-      await base44.entities.Swipe.create({ user_id: user.id, listing_id: listing.id, direction });
+      await api.entities.Swipe.create({ user_id: user.id, listing_id: listing.id, direction });
     } catch {}
 
     if (direction === "right") {
       try {
-        const existing = await base44.entities.Match.filter({ buyer_id: user.id, listing_id: listing.id });
+        const existing = await api.entities.Match.filter({ buyer_id: user.id, listing_id: listing.id });
         if (!existing || existing.length === 0) {
-          await base44.entities.Match.create({
+          await api.entities.Match.create({
             buyer_id: user.id,
             listing_id: listing.id,
             agent_id: listing.agent_id || null,

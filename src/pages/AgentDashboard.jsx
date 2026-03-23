@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44, supabase } from "@/api/base44Client";
+import { api, supabase } from "@/api/apiClient";
 import { createPageUrl } from "../utils";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -17,12 +17,12 @@ export default function AgentDashboard() {
 
   useEffect(() => {
     const load = async () => {
-      const me = await base44.auth.me();
+      const me = await api.auth.me();
       setUser(me);
 
       const [listings, matches] = await Promise.all([
-        base44.entities.PropertyListing.filter({ agent_id: me.id }),
-        base44.entities.Match.filter({ agent_id: me.id }),
+        api.entities.PropertyListing.filter({ agent_id: me.id }),
+        api.entities.Match.filter({ agent_id: me.id }),
       ]);
       setListingCount(listings.length);
       setMatchCount(matches.length);

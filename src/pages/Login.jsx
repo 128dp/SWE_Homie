@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '@/api/base44Client';
+import { supabase } from '@/api/apiClient';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

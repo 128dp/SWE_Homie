@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { base44, supabase } from "@/api/base44Client";
+import { api, supabase } from "@/api/apiClient";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send, ArrowLeft, Loader2, Bed, Maximize2, MapPin } from "lucide-react";
@@ -21,10 +21,10 @@ export default function ChatRoom() {
 
   useEffect(() => {
     const load = async () => {
-      const me = await base44.auth.me();
+      const me = await api.auth.me();
       setUser(me);
       if (matchId) {
-        const matchData = await base44.entities.Match.filter({ id: matchId });
+        const matchData = await api.entities.Match.filter({ id: matchId });
         if (matchData.length > 0) {
           setMatch(matchData[0]);
           if (matchData[0].listing_id) {
@@ -32,7 +32,7 @@ export default function ChatRoom() {
             if (l) setListing(l);
           }
         }
-        const msgs = await base44.entities.ChatMessage.filter({ match_id: matchId });
+        const msgs = await api.entities.ChatMessage.filter({ match_id: matchId });
         setMessages(msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
       }
       setLoading(false);
@@ -78,7 +78,7 @@ export default function ChatRoom() {
     };
     setMessages((prev) => [...prev, optimistic]);
 
-    const created = await base44.entities.ChatMessage.create({
+    const created = await api.entities.ChatMessage.create({
       match_id: matchId,
       user_id: user.id,
       sender_name: user.full_name || user.email,

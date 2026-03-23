@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44, supabase } from "@/api/base44Client";
+import { api, supabase } from "@/api/apiClient";
 import { createPageUrl } from "../utils";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -20,21 +20,21 @@ export default function Matches() {
 
   useEffect(() => {
     const load = async () => {
-      const me = await base44.auth.me();
+      const me = await api.auth.me();
       setUser(me);
       const isAgent = me.user_type === "agent";
       let data;
       if (isAgent) {
-        data = await base44.entities.Match.filter({ agent_id: me.id });
+        data = await api.entities.Match.filter({ agent_id: me.id });
       } else {
-        data = await base44.entities.Match.filter({ buyer_id: me.id });
+        data = await api.entities.Match.filter({ buyer_id: me.id });
       }
       const sorted = (data || []).sort((a, b) => (b.compatibility_score ?? 0) - (a.compatibility_score ?? 0));
 
       // Load profile + listing details + score breakdowns in parallel
       const listingIds = sorted.map(m => m.listing_id).filter(Boolean);
       const [profileRes, listingsRes, scoresRes] = await Promise.all([
-        base44.entities.LifestyleProfile.filter({ user_id: me.id }),
+        api.entities.LifestyleProfile.filter({ user_id: me.id }),
         listingIds.length > 0 ? supabase.from('listings').select('*').in('id', listingIds) : { data: [] },
         listingIds.length > 0 ? supabase.from('lifestyle_scores').select('listing_id, score_breakdown').eq('user_id', me.id).in('listing_id', listingIds) : { data: [] },
       ]);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44, supabase } from "@/api/base44Client";
+import { api, supabase } from "@/api/apiClient";
 import { createPageUrl } from "../utils";
 import { Link } from "react-router-dom";
 import { Compass, Settings, MessageSquare, ArrowRight, AlertCircle, Bed, Maximize2, MapPin } from "lucide-react";
@@ -19,13 +19,13 @@ export default function BuyerDashboard() {
 
   useEffect(() => {
     const load = async () => {
-      const me = await base44.auth.me();
+      const me = await api.auth.me();
       setUser(me);
 
       const [profiles, matches, swipes] = await Promise.all([
-        base44.entities.LifestyleProfile.filter({ user_id: me.id }),
-        base44.entities.Match.filter({ buyer_id: me.id }),
-        base44.entities.Swipe.filter({ user_id: me.id }),
+        api.entities.LifestyleProfile.filter({ user_id: me.id }),
+        api.entities.Match.filter({ buyer_id: me.id }),
+        api.entities.Swipe.filter({ user_id: me.id }),
       ]);
 
       setMatchCount(matches.length);

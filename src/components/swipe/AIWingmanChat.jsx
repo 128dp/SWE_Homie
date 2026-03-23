@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Loader2, Brain } from "lucide-react";
@@ -50,7 +50,7 @@ User Question: ${q}
 
 Answer concisely in 2–4 sentences. Be honest about pros and cons.`;
 
-    const res = await base44.integrations.Core.InvokeLLM({ prompt, add_context_from_internet: true });
+    const res = await api.integrations.Core.InvokeLLM({ prompt, add_context_from_internet: true });
     setMessages((prev) => [...prev, { role: "ai", content: res }]);
     setLoading(false);
   };

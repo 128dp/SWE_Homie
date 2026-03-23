@@ -1,5 +1,4 @@
-// base44Client.js — REPLACED: Base44 SDK → Supabase + Anthropic
-// Same export shape so all existing pages work without changes.
+// apiClient.js — Supabase + Groq powered API client for Homie
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -122,8 +121,5 @@ const functions = {
   },
 };
 
-// ─── NO-OP (Base44-specific, not needed) ──────────────────────────────────────
-const appLogs = { logUserInApp: () => Promise.resolve() };
-
 // ─── EXPORT ───────────────────────────────────────────────────────────────────
-export const base44 = { auth, entities, integrations, functions, appLogs };
+export const api = { auth, entities, integrations, functions };

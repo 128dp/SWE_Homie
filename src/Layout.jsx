@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "./utils";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/apiClient";
 import {
   Home, Compass, User, MessageSquare, Settings, Building2,
   LogOut, Menu, X
@@ -15,9 +15,9 @@ export default function Layout({ children, currentPageName }) {
 
   useEffect(() => {
     const loadUser = async () => {
-      const isAuth = await base44.auth.isAuthenticated();
+      const isAuth = await api.auth.isAuthenticated();
       if (isAuth) {
-        const me = await base44.auth.me();
+        const me = await api.auth.me();
         setUser(me);
       }
       setLoading(false);
@@ -94,7 +94,7 @@ export default function Layout({ children, currentPageName }) {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-slate-400"
-            onClick={() => base44.auth.logout()}
+            onClick={() => api.auth.logout()}
           >
             <LogOut className="w-4 h-4" />
           </Button>

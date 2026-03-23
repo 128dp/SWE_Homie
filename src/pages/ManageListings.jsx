@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, Loader2, Building2, MapPin, Eye, Heart } from "lucide-react";
-import { supabase } from "@/api/base44Client";
+import { supabase } from "@/api/apiClient";
 import { toast } from "sonner";
 
 const LIFESTYLE_TAG_OPTIONS = [
@@ -43,7 +43,7 @@ export default function ManageListings() {
   const [swipeStats, setSwipeStats] = useState({});
 
   const loadListings = async (userId) => {
-    const data = await base44.entities.PropertyListing.filter({ agent_id: userId });
+    const data = await api.entities.PropertyListing.filter({ agent_id: userId });
     setListings(data);
     setLoading(false);
 
@@ -62,7 +62,7 @@ export default function ManageListings() {
 
   useEffect(() => {
     const init = async () => {
-      const me = await base44.auth.me();
+      const me = await api.auth.me();
       setUser(me);
       await loadListings(me.id);
     };
@@ -86,10 +86,10 @@ export default function ManageListings() {
     };
 
     if (editing) {
-      await base44.entities.PropertyListing.update(editing.id, data);
+      await api.entities.PropertyListing.update(editing.id, data);
       toast.success("Listing updated");
     } else {
-      const created = await base44.entities.PropertyListing.create(data);
+      const created = await api.entities.PropertyListing.create(data);
       toast.success("Listing created — computing amenities...");
       fetch("/api/precompute-single-listing", {
         method: "POST",
@@ -107,7 +107,7 @@ export default function ManageListings() {
 
   const handleDelete = async (id, title) => {
     if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
-    await base44.entities.PropertyListing.delete(id);
+    await api.entities.PropertyListing.delete(id);
     toast.success("Listing deleted");
     await loadListings(user.id);
   };
@@ -141,7 +141,7 @@ export default function ManageListings() {
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    const { file_url } = await api.integrations.Core.UploadFile({ file });
     setForm((f) => ({ ...f, photos: [...f.photos, file_url] }));
   };
 

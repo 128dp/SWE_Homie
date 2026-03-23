@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/apiClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Sparkles, Star, CheckSquare, Square, X } from "lucide-react";
@@ -14,7 +14,7 @@ export default function ComparisonTool({ matches, user, onClose }) {
 
   useEffect(() => {
     const load = async () => {
-      const allNotes = await base44.entities.PropertyNote.filter({ user_id: user.id });
+      const allNotes = await api.entities.PropertyNote.filter({ user_id: user.id });
       const map = {};
       allNotes.forEach((n) => { map[n.match_id] = n; });
       setNotes(map);
@@ -56,7 +56,7 @@ ${items.map((p, i) => `**Property ${i + 1}: ${p.title}**
 
 Please provide a concise, structured comparison across these properties. Highlight each property's strengths and weaknesses based on the buyer's own notes and ratings. End with a clear recommendation on which property best suits the buyer and why.`;
 
-    const response = await base44.integrations.Core.InvokeLLM({ prompt });
+    const response = await api.integrations.Core.InvokeLLM({ prompt });
     setResult(response);
     setComparing(false);
   };

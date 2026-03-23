@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/apiClient";
 import { createPageUrl } from "../utils";
 import { Button } from "@/components/ui/button";
 import { Home, Building2, Sparkles } from "lucide-react";
@@ -11,7 +11,7 @@ export default function SetupRole() {
 
   useEffect(() => {
     const load = async () => {
-      const me = await base44.auth.me();
+      const me = await api.auth.me();
       setUser(me);
       // If user already has a type, redirect
       if (me.user_type) {
@@ -23,7 +23,7 @@ export default function SetupRole() {
 
   const selectRole = async (role) => {
     setSaving(true);
-    await base44.auth.updateMe({ user_type: role });
+    await api.auth.updateMe({ user_type: role });
     window.location.href = createPageUrl(role === "agent" ? "AgentDashboard" : "BuyerDashboard");
   };
 

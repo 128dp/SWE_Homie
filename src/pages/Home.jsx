@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/apiClient";
 import { createPageUrl } from "../utils";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Building2, Heart, Brain, MessageSquare } from "lucide-react";
@@ -10,9 +10,9 @@ export default function Home() {
 
   useEffect(() => {
     const check = async () => {
-      const isAuth = await base44.auth.isAuthenticated();
+      const isAuth = await api.auth.isAuthenticated();
       if (isAuth) {
-        const user = await base44.auth.me();
+        const user = await api.auth.me();
         if (!user.user_type) {
           window.location.href = createPageUrl("SetupRole");
         } else if (user.user_type === "agent") {
@@ -60,7 +60,7 @@ export default function Home() {
             <span className="font-bold text-xl tracking-tight text-slate-900">Homie</span>
           </div>
           <Button
-            onClick={() => base44.auth.redirectToLogin()}
+            onClick={() => api.auth.redirectToLogin()}
             className="bg-orange-600 hover:bg-orange-500 text-white rounded-full px-6 h-10 text-sm font-semibold"
           >
             Sign In
@@ -89,7 +89,7 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button
-                onClick={() => base44.auth.redirectToLogin({ next: createPageUrl("SetupRole") })}
+                onClick={() => api.auth.redirectToLogin({ next: createPageUrl("SetupRole") })}
                 className="bg-orange-600 hover:bg-orange-500 text-white rounded-full px-8 h-12 text-base font-semibold gap-2"
               >
                 Get Started as Buyer <ArrowRight className="w-4 h-4" />
@@ -97,7 +97,7 @@ export default function Home() {
               <Button
                 variant="outline"
                 className="border-slate-300 text-slate-700 hover:bg-slate-100 rounded-full px-8 h-12 text-base font-medium"
-                onClick={() => base44.auth.redirectToLogin({ next: createPageUrl("SetupRole") })}
+                onClick={() => api.auth.redirectToLogin({ next: createPageUrl("SetupRole") })}
               >
                 I'm a Property Agent
               </Button>

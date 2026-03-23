@@ -36,7 +36,7 @@ Built with React + Vite (frontend), Express (backend), and Supabase (database + 
 Homie/
 ├── src/
 │   ├── api/
-│   │   └── base44Client.js      # Supabase client + auth + entity wrappers
+│   │   └── apiClient.js         # Supabase client + auth + entity wrappers
 │   ├── pages/
 │   │   ├── SwipeDiscover.jsx    # Main listing discovery (LifeScore sorted)
 │   │   ├── LifestyleProfile.jsx # User preferences + triggers score computation

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/apiClient";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -17,7 +17,7 @@ export default function PropertyNotePanel({ match, user }) {
 
   useEffect(() => {
     const load = async () => {
-      const existing = await base44.entities.PropertyNote.filter({ match_id: match.id, user_id: user.id });
+      const existing = await api.entities.PropertyNote.filter({ match_id: match.id, user_id: user.id });
       if (existing.length > 0) {
         const n = existing[0];
         setNote(n);
@@ -33,9 +33,9 @@ export default function PropertyNotePanel({ match, user }) {
     setSaving(true);
     const data = { match_id: match.id, user_id: user.id, listing_title: match.listing_title, visited, notes, rating };
     if (note) {
-      await base44.entities.PropertyNote.update(note.id, data);
+      await api.entities.PropertyNote.update(note.id, data);
     } else {
-      const created = await base44.entities.PropertyNote.create(data);
+      const created = await api.entities.PropertyNote.create(data);
       setNote(created);
     }
     setSaving(false);

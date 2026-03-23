@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -100,9 +100,9 @@ export default function LifestyleProfile() {
 
   useEffect(() => {
     const load = async () => {
-      const me = await base44.auth.me();
+      const me = await api.auth.me();
       setUser(me);
-      const profiles = await base44.entities.LifestyleProfile.filter({ user_id: me.id });
+      const profiles = await api.entities.LifestyleProfile.filter({ user_id: me.id });
       if (profiles.length > 0) {
         setProfile(profiles[0]);
         setForm({ ...DEFAULT_FORM, ...profiles[0] });
@@ -115,9 +115,9 @@ export default function LifestyleProfile() {
     setSaving(true);
     const data = { ...form, user_id: user.id };
     if (profile) {
-      await base44.entities.LifestyleProfile.update(profile.id, data);
+      await api.entities.LifestyleProfile.update(profile.id, data);
     } else {
-      const created = await base44.entities.LifestyleProfile.create(data);
+      const created = await api.entities.LifestyleProfile.create(data);
       setProfile(created);
     }
     setSaving(false);

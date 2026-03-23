@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { api } from "@/api/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X, Send, Loader2, Brain } from "lucide-react";
@@ -41,7 +41,7 @@ User Question: ${query}
 
 Provide a concise, helpful analysis. Reference specific aspects of the property relative to the user's lifestyle weights. Be honest about pros and cons.`;
 
-    const res = await base44.integrations.Core.InvokeLLM({
+    const res = await api.integrations.Core.InvokeLLM({
       prompt,
       add_context_from_internet: true,
     });
