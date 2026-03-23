@@ -125,9 +125,10 @@ async function geocodeAddress(address, block, town) {
   for (const query of queries) {
     try {
       const encoded = encodeURIComponent(query);
+      const headers = token ? { 'Authorization': token } : {};
       const res = await fetch(
         `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${encoded}&returnGeom=Y&getAddrDetails=Y&pageNum=1`,
-        { headers: { 'Authorization': token } }
+        { headers }
       );
       const data = await res.json();
       if (data.results && data.results.length > 0) {
@@ -380,7 +381,9 @@ app.post('/api/precompute-single-listing', async (req, res) => {
       findNearestFromTable('amenity_park', coords.lat, coords.lng),
     ]);
 
-    await supabase.from('listings').update({ lat: coords.lat, lng: coords.lng, geocoded: true }).eq('id', listingId);
+    const { error: updateErr } = await supabase.from('listings').update({ lat: coords.lat, lng: coords.lng, geocoded: true }).eq('id', listingId);
+    if (updateErr) console.error('❌ Failed to save lat/lng:', updateErr);
+    else console.log('✅ Geocoded:', coords.lat, coords.lng);
 
     const { error } = await supabase.from('listing_amenities').upsert({
       listing_id: listingId,

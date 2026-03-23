@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { api } from "@/api/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,10 @@ const LIFESTYLE_TAG_OPTIONS = [
 const emptyForm = {
   title: "",
   address: "",
+  lat: null,
+  lng: null,
+  floor_number: "",
+  unit_number: "",
   price: "",
   num_bedrooms: 3,
   property_type: "hdb",
@@ -31,6 +35,85 @@ const emptyForm = {
   lifestyle_tags: [],
   photos: [],
 };
+
+function AddressAutocomplete({ value, onChange, onSelect }) {
+  const [query, setQuery] = useState(value || "");
+  const [suggestions, setSuggestions] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef(null);
+  const wrapperRef = useRef(null);
+
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
+  useEffect(() => {
+    const handleClick = (e) => { if (!wrapperRef.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const search = (q) => {
+    clearTimeout(debounceRef.current);
+    if (q.length < 3) { setSuggestions([]); setOpen(false); return; }
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${encodeURIComponent(q)}&returnGeom=Y&getAddrDetails=Y&pageNum=1`
+        );
+        const data = await res.json();
+        setSuggestions(data.results?.slice(0, 6) || []);
+        setOpen(true);
+      } catch {}
+      setLoading(false);
+    }, 300);
+  };
+
+  const handleChange = (e) => {
+    const q = e.target.value;
+    setQuery(q);
+    onChange(q);
+    search(q);
+  };
+
+  const handleSelect = (result) => {
+    const addr = result.ADDRESS;
+    setQuery(addr);
+    setSuggestions([]);
+    setOpen(false);
+    onSelect({ address: addr, lat: parseFloat(result.LATITUDE), lng: parseFloat(result.LONGITUDE) });
+  };
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <div className="relative">
+        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+        {loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-slate-400" />}
+        <input
+          value={query}
+          onChange={handleChange}
+          onFocus={() => suggestions.length > 0 && setOpen(true)}
+          placeholder="Search Singapore address..."
+          className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+        />
+      </div>
+      {open && suggestions.length > 0 && (
+        <ul className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-lg max-h-52 overflow-y-auto">
+          {suggestions.map((r, i) => (
+            <li
+              key={i}
+              onMouseDown={() => handleSelect(r)}
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-orange-50 border-b border-slate-50 last:border-0"
+            >
+              <span className="font-medium text-slate-800">{r.BUILDING !== "NIL" ? r.BUILDING : r.ROAD_NAME}</span>
+              <span className="block text-xs text-slate-400 truncate">{r.ADDRESS}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export default function ManageListings() {
   const [user, setUser] = useState(null);
@@ -90,12 +173,16 @@ export default function ManageListings() {
       toast.success("Listing updated");
     } else {
       const created = await api.entities.PropertyListing.create(data);
-      toast.success("Listing created — computing amenities...");
-      fetch("/api/precompute-single-listing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listing_id: created.id }),
-      }).catch(() => {});
+      if (form.lat && form.lng) {
+        toast.success("Listing created!");
+      } else {
+        toast.success("Listing created — computing amenities...");
+        fetch("/api/precompute-single-listing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ listing_id: created.id }),
+        }).catch(() => {});
+      }
     }
 
     setDialogOpen(false);
@@ -123,8 +210,12 @@ export default function ManageListings() {
       description: listing.description || "",
       location_area: listing.location_area || "",
       floor_area_sqm: listing.floor_area_sqm || "",
+      floor_number: listing.floor_number || "",
+      unit_number: listing.unit_number || "",
       lifestyle_tags: listing.lifestyle_tags || [],
       photos: listing.photos || [],
+      lat: listing.lat || null,
+      lng: listing.lng || null,
     });
     setDialogOpen(true);
   };
@@ -174,7 +265,26 @@ export default function ManageListings() {
               </div>
               <div>
                 <Label className="text-sm mb-1 block">Address *</Label>
-                <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="e.g. Block 123, Tampines St 11" />
+                <AddressAutocomplete
+                  value={form.address}
+                  onChange={(address) => setForm((f) => ({ ...f, address, lat: null, lng: null }))}
+                  onSelect={({ address, lat, lng }) => setForm((f) => ({ ...f, address, lat, lng }))}
+                />
+                {form.lat && (
+                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                    <MapPin className="w-3 h-3" /> Location confirmed ({form.lat.toFixed(4)}, {form.lng.toFixed(4)})
+                  </p>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm mb-1 block">Floor</Label>
+                  <Input placeholder="e.g. 12" value={form.floor_number} onChange={(e) => setForm({ ...form, floor_number: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-sm mb-1 block">Unit</Label>
+                  <Input placeholder="e.g. 34" value={form.unit_number} onChange={(e) => setForm({ ...form, unit_number: e.target.value })} />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
