@@ -1,7 +1,6 @@
-import React, { useState } from "react";
-import { Input } from "@/components/ui/input";
+import React, { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, X, MapPin } from "lucide-react";
+import { Plus, X, MapPin, Loader2 } from "lucide-react";
 
 const SUGGESTIONS = ["Child's school", "Parents' house", "Workplace", "Partner's workplace", "Place of worship"];
 
@@ -11,25 +10,110 @@ const MODES = [
   { value: "drive", label: "🚗 Drive" },
 ];
 
-export default function ImportantPlaces({ places, onChange }) {
-  const [label, setLabel] = useState("");
-  const [postal, setPostal] = useState("");
-  const [mode, setMode] = useState("commute");
+function detectMode(text) {
+  const t = text.toLowerCase();
+  if (/\bwalk\b/.test(t)) return "walk";
+  if (/\bdrive\b|\bcar\b|\bdriving\b/.test(t)) return "drive";
+  if (/\bcommute\b|\btransit\b|\bmrt\b|\bbus\b/.test(t)) return "commute";
+  return null;
+}
 
-  const add = () => {
-    if (!label.trim() || !postal.trim()) return;
-    if (places.length >= 5) return;
-    onChange([...places, { label: label.trim(), postal_code: postal.trim(), mode }]);
-    setLabel("");
-    setPostal("");
-    setMode("commute");
+function AddressSearch({ onSelect }) {
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef(null);
+  const wrapperRef = useRef(null);
+
+  useEffect(() => {
+    const handleClick = (e) => { if (!wrapperRef.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const search = (q) => {
+    clearTimeout(debounceRef.current);
+    if (q.length < 3) { setSuggestions([]); setOpen(false); return; }
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${encodeURIComponent(q)}&returnGeom=Y&getAddrDetails=Y&pageNum=1`
+        );
+        const data = await res.json();
+        setSuggestions(data.results?.slice(0, 6) || []);
+        setOpen(true);
+      } catch {}
+      setLoading(false);
+    }, 300);
   };
 
-  const remove = (i) => onChange(places.filter((_, idx) => idx !== i));
+  const handleSelect = (result) => {
+    onSelect({
+      address: result.ADDRESS,
+      lat: parseFloat(result.LATITUDE),
+      lng: parseFloat(result.LONGITUDE),
+    });
+    setQuery("");
+    setSuggestions([]);
+    setOpen(false);
+  };
 
-  const isValidPostal = (p) => /^\d{6}$/.test(p);
+  return (
+    <div ref={wrapperRef} className="relative">
+      <div className="relative">
+        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+        {loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-slate-400" />}
+        <input
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); search(e.target.value); }}
+          onFocus={() => suggestions.length > 0 && setOpen(true)}
+          placeholder="Search Singapore address..."
+          className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+        />
+      </div>
+      {open && suggestions.length > 0 && (
+        <ul className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-lg max-h-52 overflow-y-auto">
+          {suggestions.map((r, i) => (
+            <li
+              key={i}
+              onMouseDown={() => handleSelect(r)}
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-orange-50 border-b border-slate-50 last:border-0"
+            >
+              <span className="font-medium text-slate-800">{r.BUILDING !== "NIL" ? r.BUILDING : r.ROAD_NAME}</span>
+              <span className="block text-xs text-slate-400 truncate">{r.ADDRESS}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
-  const modeLabel = (m) => MODES.find((x) => x.value === m)?.label || "🚌 Commute";
+const modeLabel = (m) => MODES.find((x) => x.value === m)?.label || "🚌 Commute";
+
+export default function ImportantPlaces({ places, onChange }) {
+  const [label, setLabel] = useState("");
+  const [address, setAddress] = useState(null); // { address, lat, lng }
+  const [mode, setMode] = useState("commute");
+  const [minutes, setMinutes] = useState(20);
+
+  const handleLabelChange = (val) => {
+    setLabel(val);
+    const detected = detectMode(val);
+    if (detected) setMode(detected);
+  };
+
+  const add = () => {
+    if (!label.trim() || !address) return;
+    if (places.length >= 5) return;
+    onChange([...places, { label: label.trim(), address: address.address, lat: address.lat, lng: address.lng, mode, minutes }]);
+    setLabel("");
+    setAddress(null);
+    setMode("commute");
+    setMinutes(20);
+  };
 
   return (
     <div className="space-y-4">
@@ -43,12 +127,15 @@ export default function ImportantPlaces({ places, onChange }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-slate-800">{place.label}</p>
-                <p className="text-xs text-slate-400">Postal code: {place.postal_code}</p>
+                <p className="text-xs text-slate-400 truncate">{place.address || place.postal_code}</p>
               </div>
-              <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full flex-shrink-0">
-                {modeLabel(place.mode || "commute")}
-              </span>
-              <button onClick={() => remove(i)} className="p-1 text-red-400 hover:text-red-600">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                  {modeLabel(place.mode || "commute")}
+                </span>
+                <span className="text-xs text-slate-400">≤{place.minutes || 20}min</span>
+              </div>
+              <button onClick={() => onChange(places.filter((_, idx) => idx !== i))} className="p-1 text-red-400 hover:text-red-600">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -66,7 +153,7 @@ export default function ImportantPlaces({ places, onChange }) {
             {SUGGESTIONS.filter((s) => !places.find((p) => p.label === s)).map((s) => (
               <button
                 key={s}
-                onClick={() => setLabel(s)}
+                onClick={() => handleLabelChange(s)}
                 className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
                   label === s
                     ? "border-orange-400 bg-orange-50 text-orange-700"
@@ -78,21 +165,33 @@ export default function ImportantPlaces({ places, onChange }) {
             ))}
           </div>
 
-          <Input
+          <input
             placeholder="Label (e.g. Child's school)"
             value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            className="bg-white"
+            onChange={(e) => handleLabelChange(e.target.value)}
+            className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
           />
 
-          <div className="flex gap-2">
-            <Input
-              placeholder="6-digit postal code"
-              value={postal}
-              maxLength={6}
-              onChange={(e) => setPostal(e.target.value.replace(/\D/g, ""))}
-              className={`bg-white ${postal && !isValidPostal(postal) ? "border-red-300" : ""}`}
+          {/* Address search */}
+          <AddressSearch onSelect={(result) => setAddress(result)} />
+          {address && (
+            <p className="text-xs text-green-600 flex items-center gap-1">
+              <MapPin className="w-3 h-3" /> {address.address}
+            </p>
+          )}
+
+          {/* Travel time threshold */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">Must reach within</span>
+            <input
+              type="number"
+              min={5}
+              max={120}
+              value={minutes}
+              onChange={(e) => setMinutes(Number(e.target.value))}
+              className="w-14 px-2 py-1 border border-slate-200 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
             />
+            <span className="text-xs text-slate-500">min</span>
           </div>
 
           {/* Mode selector */}
@@ -115,13 +214,9 @@ export default function ImportantPlaces({ places, onChange }) {
             </div>
           </div>
 
-          {postal && !isValidPostal(postal) && (
-            <p className="text-xs text-red-500">Please enter a valid 6-digit Singapore postal code.</p>
-          )}
-
           <Button
             onClick={add}
-            disabled={!label.trim() || !isValidPostal(postal)}
+            disabled={!label.trim() || !address}
             size="sm"
             className="w-full bg-orange-600 hover:bg-orange-500"
           >

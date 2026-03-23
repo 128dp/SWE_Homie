@@ -112,13 +112,30 @@ export default function LifestyleMatchPanel({ listing, profile, scoreBreakdown }
       {hasImportantPlaces && (
         <div>
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Important Places</p>
-          <div className="space-y-1">
-            {profile.important_places.map((p, i) => (
-              <div key={i} className="flex items-center gap-1 text-xs text-slate-600">
-                <MapPin className="w-3 h-3 text-indigo-400 flex-shrink-0" />
-                {p.label || p.postal_code}
-              </div>
-            ))}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            {profile.important_places.map((p, i) => {
+              const bd = scoreBreakdown?.[`place_${p.label}`];
+              const modeIcon = { walk: "🚶", commute: "🚌", drive: "🚗" }[p.mode || "commute"];
+              return (
+                <div key={i} className="flex items-center gap-1.5">
+                  {bd ? (
+                    bd.status === "full" ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    ) : bd.status === "partial" ? (
+                      <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                    )
+                  ) : (
+                    <MapPin className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                  )}
+                  <span className={`text-xs ${!bd ? "text-slate-400" : bd.status !== "none" ? "text-slate-700" : "text-slate-400"}`}>
+                    {p.label}
+                    {bd?.minutes != null ? ` ${modeIcon}${bd.minutes}min` : ""}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

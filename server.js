@@ -36,8 +36,11 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
 }
 
 // ─── Convert distance to minutes ─────────────────────────────────────────────
+// walk: 80m/min (4.8km/h), commute/transit: 300m/min (18km/h), drive: 500m/min (30km/h avg SG)
 function distanceToMinutes(metres, mode = 'walk') {
-  return mode === 'walk' ? metres / 80 : metres / 300;
+  if (mode === 'walk') return metres / 80;
+  if (mode === 'drive') return metres / 500;
+  return metres / 300; // commute / transit
 }
 
 // ─── OneMap token auto-refresh ────────────────────────────────────────────────
@@ -268,16 +271,17 @@ function computeScoreFromAmenities(amenities, profile, listingCoords) {
     const threshold = place.minutes || 20;
     const mode = place.mode || 'commute';
     const buffer = mode === 'walk' ? 3 : 5;
-    const minutes = distanceToMinutes(distanceM, mode);
+    const travelMins = distanceToMinutes(distanceM, mode);
+    const key = `place_${place.label}`;
 
-    if (minutes <= threshold) {
+    if (travelMins <= threshold) {
       totalPoints += 1;
-      breakdown[`place_${place.name}`] = { label: place.name, status: 'full', points: 1, minutes: Math.round(minutes) };
-    } else if (minutes <= threshold + buffer) {
+      breakdown[key] = { label: place.label, status: 'full', points: 1, minutes: Math.round(travelMins), mode };
+    } else if (travelMins <= threshold + buffer) {
       totalPoints += 0.5;
-      breakdown[`place_${place.name}`] = { label: place.name, status: 'partial', points: 0.5, minutes: Math.round(minutes) };
+      breakdown[key] = { label: place.label, status: 'partial', points: 0.5, minutes: Math.round(travelMins), mode };
     } else {
-      breakdown[`place_${place.name}`] = { label: place.name, status: 'none', points: 0, minutes: Math.round(minutes) };
+      breakdown[key] = { label: place.label, status: 'none', points: 0, minutes: Math.round(travelMins), mode };
     }
   }
 
@@ -431,6 +435,22 @@ app.post('/api/compute-scores', async (req, res) => {
     const { data: amenityRows } = await supabase.from('listing_amenities').select('*');
     const amenityMap = {};
     (amenityRows || []).forEach(a => { amenityMap[a.listing_id] = a; });
+
+    // Geocode any important places that have postal_code but no lat/lng (legacy entries)
+    const places = profile.important_places || [];
+    let geocodedAny = false;
+    for (const place of places) {
+      if (place.lat && place.lng) continue;
+      if (!place.postal_code) continue;
+      const coords = await geocodeAddress(place.postal_code);
+      if (coords) { place.lat = coords.lat; place.lng = coords.lng; geocodedAny = true; }
+    }
+    if (geocodedAny) {
+      // Persist geocoded coords back so future runs are instant
+      await supabase.from('lifestyle_profiles')
+        .update({ important_places: places })
+        .eq('user_id', userId);
+    }
 
     await supabase.from('lifestyle_scores').delete().eq('user_id', userId);
 
