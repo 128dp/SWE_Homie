@@ -10,7 +10,7 @@ Built with React + Vite (frontend), Express (backend), and Supabase (database + 
 
 - **LifeScore Algorithm** — scores every listing against your lifestyle profile using real Singapore amenity data
 - **Swipe to Discover** — Tinder-style card interface sorted by LifeScore
-- **Wingman AI** — Gemini-powered property advisor for Singapore housing questions
+- **Wingman AI** — Groq-powered property advisor using meta-llama/llama-4-scout-17b-16e-instruct
 - **Agent Dashboard** — agents can list properties; new listings are automatically geocoded and scored
 - **Matches & Chat** — buyers match with listings and chat with agents
 - **Property Notes** — save notes on listings you're interested in
@@ -90,14 +90,14 @@ Create a `.env` file in the root:
 ```
 VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-GEMINI_API_KEY=your_gemini_api_key
+GROQ_API_KEY=your_groq_api_key
 ONEMAP_EMAIL=your_onemap_email
 ONEMAP_PASSWORD=your_onemap_password
 ```
 
 Get credentials from:
 - Supabase: [supabase.com](https://supabase.com) → Project Settings → API
-- Gemini: [aistudio.google.com](https://aistudio.google.com)
+- Groq API: [console.groq.com](https://console.groq.com)
 - OneMap: [onemap.gov.sg](https://www.onemap.gov.sg) (register for free)
 
 ### 3. Database setup

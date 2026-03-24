@@ -72,9 +72,10 @@ export default function SwipeDiscover() {
       setHardCount(hardGroup.length);
 
       // Insert separator between groups if both have listings
-      const combined = softGroup.length > 0
-        ? [...hardGroup, SEPARATOR, ...softGroup]
-        : hardGroup;
+      const combined =
+        hardGroup.length > 0 && softGroup.length > 0
+          ? [...hardGroup, SEPARATOR, ...softGroup]
+          : [...hardGroup, ...softGroup];
 
       setListings(combined);
       setLoading(false);
@@ -84,16 +85,23 @@ export default function SwipeDiscover() {
 
   const handleSwipe = async (direction) => {
     const listing = listings[currentIndex];
-    if (!listing || listing.isSeparator) return;
+    if (!listing || listing.isSeparator || !user) return;
+
     setSwipeDir(direction);
 
     try {
-      await api.entities.Swipe.create({ user_id: user.id, listing_id: listing.id, direction });
-    } catch {}
+      await api.entities.Swipe.create({
+        user_id: user.id,
+        listing_id: listing.id,
+        direction,
+      });
 
-    if (direction === "right") {
-      try {
-        const existing = await api.entities.Match.filter({ buyer_id: user.id, listing_id: listing.id });
+      if (direction === "right") {
+        const existing = await api.entities.Match.filter({
+          buyer_id: user.id,
+          listing_id: listing.id,
+        });
+
         if (!existing || existing.length === 0) {
           await api.entities.Match.create({
             buyer_id: user.id,
@@ -104,15 +112,20 @@ export default function SwipeDiscover() {
             buyer_name: user.full_name || user.email,
             status: "active",
           });
+
           toast.success("Match created! Check your Matches tab.");
         }
-      } catch {}
-    }
+      }
 
-    setTimeout(() => {
+      setTimeout(() => {
+        setSwipeDir(null);
+        setCurrentIndex((i) => i + 1);
+      }, 300);
+    } catch (err) {
+      console.error("Swipe failed:", err);
       setSwipeDir(null);
-      setCurrentIndex((i) => i + 1);
-    }, 300);
+      toast.error("Could not save your swipe. Please try again.");
+    }
   };
 
   if (loading) {
@@ -148,7 +161,7 @@ export default function SwipeDiscover() {
           </Button>
           <Link to={createPageUrl("LifestyleProfile")}>
             <Button variant="outline" size="sm" className="gap-2">
-              <SlidersHorizontal className="w-4 h-4" /> Filters
+              <SlidersHorizontal className="w-4 h-4" /> Edit Preferences
             </Button>
           </Link>
         </div>

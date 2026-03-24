@@ -87,14 +87,15 @@ const entities = Object.fromEntries(
 // ─── INTEGRATIONS ─────────────────────────────────────────────────────────────
 const integrations = {
   Core: {
-    InvokeLLM: async ({ prompt }) => {
-      const res = await fetch('/api/wingman', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
+    InvokeLLM: async ({ prompt, messages = [] }) => {
+      const res = await fetch("/api/wingman", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, messages }),
       });
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'LLM error');
+      if (!res.ok) throw new Error(data.error || "LLM error");
       return data.reply;
     },
     UploadFile: async ({ file }) => {
