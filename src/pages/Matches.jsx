@@ -13,6 +13,61 @@ import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/navigation";
+import { motion, useMotionValue, useTransform } from "framer-motion";
+import { X } from "lucide-react"; // add X to existing lucide import
+
+function SwipeableMatchCard({ match, onArchive, onRestore, isBuyer, children }) {
+  const x = useMotionValue(0);
+  const background = useTransform(x, [-100, 0], ["rgba(239,68,68,0.15)", "rgba(0,0,0,0)"]);
+  const opacity = useTransform(x, [-150, -80], [0, 1]);
+  const restoreOpacity = useTransform(x, [80, 150], [0, 1]);
+
+  const handleDragEnd = (_, info) => {
+    if (isBuyer && info.offset.x < -100 && match.status !== 'archived') onArchive();
+    if (isBuyer && info.offset.x > 100 && match.status === 'archived') onRestore();
+  };
+
+  return (
+    <div className="relative overflow-hidden rounded-lg">
+      {isBuyer && match.status !== 'archived' && (
+        <motion.div
+          style={{ opacity }}
+          className="absolute inset-0 flex items-center justify-end pr-6 bg-red-50 rounded-lg z-0"
+        >
+          <div className="flex flex-col items-center gap-1 text-red-500">
+            <X className="w-6 h-6" />
+            <span className="text-xs font-medium">Archive</span>
+          </div>
+        </motion.div>
+      )}
+      {isBuyer && match.status === 'archived' && (
+        <motion.div
+          style={{ opacity: restoreOpacity }}
+          className="absolute inset-0 flex items-center justify-start pl-6 bg-green-50 rounded-lg z-0"
+        >
+          <div className="flex flex-col items-center gap-1 text-green-500">
+            <Heart className="w-6 h-6" />
+            <span className="text-xs font-medium">Restore</span>
+          </div>
+        </motion.div>
+      )}
+      <motion.div
+        style={{ x, background }}
+        drag={isBuyer ? "x" : false}
+        dragConstraints={{ 
+          left: match.status === 'archived' ? 0 : -200, 
+          right: match.status === 'archived' ? 200 : 0 
+        }}
+        dragElastic={0.2}
+        onDragEnd={handleDragEnd}
+        className="relative z-10"
+      >
+        {children}
+      </motion.div>
+    </div>
+  );
+}
+
 
 export default function Matches() {
   const [matches, setMatches] = useState([]);
@@ -21,6 +76,7 @@ export default function Matches() {
   const [profile, setProfile] = useState(null);
   const [expandedNotes, setExpandedNotes] = useState(null);
   const [showComparison, setShowComparison] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -90,6 +146,11 @@ export default function Matches() {
     return () => window.removeEventListener('focus', load);
   }, []);
 
+  const handleArchiveMatch = async (matchId) => {
+    await supabase.from('matches').update({ status: 'archived' }).eq('id', matchId);
+    setMatches(prev => prev.map(m => m.id === matchId ? { ...m, status: 'archived' } : m));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -109,6 +170,7 @@ export default function Matches() {
             {isBuyer ? "Properties you liked" : "Buyers interested in your listings"}
           </p>
         </div>
+        <div className="flex items-center gap-2">
         {isBuyer && matches.length > 0 && (
           <Button
             variant="outline"
@@ -120,6 +182,18 @@ export default function Matches() {
             Compare
           </Button>
         )}
+        
+        <Button
+          variant="outline"
+          size="sm"
+          className={showArchived ? "gap-2 bg-slate-100" : "gap-2"}
+          onClick={() => setShowArchived(a => !a)}
+        >
+          <X className="w-4 h-4" />
+          {showArchived ? "Hide Archived" : "Show Archived"}
+        </Button>
+        </div>
+
       </div>
 
       {/* Comparison tool */}
@@ -133,26 +207,39 @@ export default function Matches() {
         </Card>
       )}
 
-      {matches.length === 0 ? (
+      {matches.filter(m => showArchived ? m.status === 'archived' : m.status !== 'archived').length === 0 ? (
         <div className="text-center py-16">
           <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
             <Heart className="w-6 h-6 text-slate-300" />
           </div>
-          <h3 className="font-medium text-slate-700">No matches yet</h3>
+          <h3 className="font-medium text-slate-700">
+            {showArchived ? "No archived matches" : "No matches yet"}
+          </h3>
           <p className="text-sm text-slate-500 mt-1">
             {isBuyer ? "Start swiping to find your perfect home!" : "Matches will appear when buyers swipe right on your listings."}
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {matches.map((match) => (
-            <Card
+          {matches
+            .filter(m => showArchived ? m.status === 'archived' : m.status !== 'archived')
+            .map((match) => (
+            <SwipeableMatchCard
               key={match.id}
-              className={`border-slate-100 overflow-hidden ${
-                match.hasUnread ? "ring-2 ring-orange-200" : ""
-              }`}
+              match={match}
+              onArchive={() => handleArchiveMatch(match.id)}
+              onRestore={async () => {
+                await supabase.from('matches').update({ status: 'active' }).eq('id', match.id);
+                setMatches(prev => prev.map(m => m.id === match.id ? { ...m, status: 'active' } : m));
+              }}
+              isBuyer={isBuyer}
             >
-              {isBuyer && match.listing && (
+              <Card
+                className={`border-slate-100 overflow-hidden ${
+                  match.hasUnread ? "ring-2 ring-orange-200" : ""
+                }`}
+              >
+                {isBuyer && match.listing && (
                 <div className="relative h-32 overflow-hidden">
                   <Swiper
                     modules={[Navigation]}
@@ -257,15 +344,39 @@ export default function Matches() {
 
 
                   {isBuyer && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1.5 text-slate-500"
-                      onClick={() => setExpandedNotes(expandedNotes === match.id ? null : match.id)}
-                    >
-                      Notes
-                      {expandedNotes === match.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                    </Button>
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5 text-slate-500"
+                        onClick={() => setExpandedNotes(expandedNotes === match.id ? null : match.id)}
+                      >
+                        Notes
+                        {expandedNotes === match.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      </Button>
+                      {match.status !== 'archived' ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1.5 text-red-400 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => handleArchiveMatch(match.id)}
+                        >
+                          <X className="w-3.5 h-3.5" /> Archive
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1.5 text-green-600 hover:bg-green-50"
+                          onClick={async () => {
+                            await supabase.from('matches').update({ status: 'active' }).eq('id', match.id);
+                            setMatches(prev => prev.map(m => m.id === match.id ? { ...m, status: 'active' } : m));
+                          }}
+                        >
+                          <Heart className="w-3.5 h-3.5" /> Restore
+                        </Button>
+                      )}
+                    </>
                   )}
                   <Link to={createPageUrl(`ChatRoom?matchId=${match.id}`)}>
                     <Button size="sm" className="gap-2 bg-orange-600 hover:bg-orange-500">
@@ -289,7 +400,8 @@ export default function Matches() {
                 </div>
               )}
             </Card>
-          ))}
+              </SwipeableMatchCard>
+            ))}
         </div>
       )}
     </div>

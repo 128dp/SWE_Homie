@@ -20,6 +20,8 @@ export default function SwipeDiscover() {
   const [swipeDir, setSwipeDir] = useState(null);
   const [hardCount, setHardCount] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
+  const [showRejected, setShowRejected] = useState(false);
+  const [rejectedListings, setRejectedListings] = useState([]);
 
   useEffect(() => {
     const load = async () => {
@@ -31,6 +33,9 @@ export default function SwipeDiscover() {
 
       const swipes = await api.entities.Swipe.filter({ user_id: me.id });
       const swipedSet = new Set(swipes.map((s) => s.listing_id));
+
+      const leftSwipes = swipes.filter(s => s.direction === "left");
+      const rejectedIds = new Set(leftSwipes.map(s => s.listing_id));
 
       const allListings = await api.entities.PropertyListing.filter({ status: "active" });
       const unswiped = allListings.filter((l) => !swipedSet.has(l.id));
@@ -77,6 +82,12 @@ export default function SwipeDiscover() {
           ? [...hardGroup, SEPARATOR, ...softGroup]
           : [...hardGroup, ...softGroup];
 
+      const rejectedGroup = allListings
+        .filter(l => rejectedIds.has(l.id))
+        .map(enrich)
+        .sort(byScore);
+      setRejectedListings(rejectedGroup);
+
       setListings(combined);
       setLoading(false);
     };
@@ -84,17 +95,27 @@ export default function SwipeDiscover() {
   }, []);
 
   const handleSwipe = async (direction) => {
-    const listing = listings[currentIndex];
+    const listing = (showRejected ? rejectedListings : listings)[currentIndex];
     if (!listing || listing.isSeparator || !user) return;
 
     setSwipeDir(direction);
 
     try {
-      await api.entities.Swipe.create({
-        user_id: user.id,
-        listing_id: listing.id,
-        direction,
-      });
+      if (showRejected) {
+        // Delete old rejected swipe so it doesn't persist as "left"
+        const oldSwipes = await api.entities.Swipe.filter({
+          user_id: user.id,
+          listing_id: listing.id,
+        });
+        for (const s of oldSwipes) await api.entities.Swipe.delete(s.id);
+      }
+
+      await supabase
+        .from('swipes')
+        .upsert(
+          { user_id: user.id, listing_id: listing.id, direction },
+          { onConflict: 'user_id,listing_id' }
+        );
 
       if (direction === "right") {
         const existing = await api.entities.Match.filter({
@@ -136,12 +157,11 @@ export default function SwipeDiscover() {
     );
   }
 
-  const currentListing = listings[currentIndex];
+  const activeStack = showRejected ? rejectedListings : listings;
+  const currentListing = activeStack[currentIndex];
   const isEndOfStack = !currentListing;
   const isSeparator = currentListing?.isSeparator;
-
-  // Count remaining (excluding separator)
-  const remaining = listings.slice(currentIndex).filter(l => !l.isSeparator).length;
+  const remaining = activeStack.slice(currentIndex).filter(l => !l.isSeparator).length;
 
   return (
     <div>
@@ -164,6 +184,21 @@ export default function SwipeDiscover() {
               <SlidersHorizontal className="w-4 h-4" /> Edit Preferences
             </Button>
           </Link>
+          <Button
+            variant={showRejected ? "default" : "outline"}
+            size="sm"
+            className={showRejected
+              ? "gap-2 bg-red-500 hover:bg-red-400 text-white"
+              : "gap-2 border-red-200 text-red-500 hover:bg-red-50"
+            }
+            onClick={() => {
+              setShowRejected(r => !r);
+              setCurrentIndex(0);
+            }}
+          >
+            <X className="w-4 h-4" />
+            {showRejected ? "Exit Rejected" : "Review Rejected"}
+          </Button>
         </div>
       </div>
 
@@ -232,6 +267,12 @@ export default function SwipeDiscover() {
         </div>
       ) : (
         <div className="flex flex-col items-center gap-2 max-w-lg mx-auto">
+          {showRejected && (
+            <div className="text-xs font-medium text-red-700 bg-red-50 border border-red-200 px-3 py-1 rounded-full">
+              Reviewing rejected listings — swipe right to match!
+            </div>
+          )}
+
           {currentIndex < hardCount && (
             <div className="text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-3 py-1 rounded-full">
               Within your budget & location
