@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { api, supabase } from "@/api/apiClient";
 import { Button } from "@/components/ui/button";
-import { X, Heart, Loader2, SlidersHorizontal, MapPin, DollarSign, Brain } from "lucide-react";
+import { X, Heart, Loader2, SlidersHorizontal, MapPin, DollarSign, Brain, Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import PropertyCard from "../components/swipe/PropertyCard";
+import PropertyDetailPanel from "../components/swipe/PropertyDetailPanel";
 import AIWingmanChat from "../components/swipe/AIWingmanChat";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "../utils";
@@ -22,6 +23,7 @@ export default function SwipeDiscover() {
   const [chatOpen, setChatOpen] = useState(false);
   const [showRejected, setShowRejected] = useState(false);
   const [rejectedListings, setRejectedListings] = useState([]);
+  const [detailListing, setDetailListing] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -302,6 +304,7 @@ export default function SwipeDiscover() {
                 if (info.offset.x > 100) handleSwipe("right");
                 else if (info.offset.x < -100) handleSwipe("left");
               }}
+              onTap={() => setDetailListing(currentListing)}
               style={{ cursor: "grab", width: "100%" }}
               whileDrag={{ cursor: "grabbing" }}
             >
@@ -310,6 +313,7 @@ export default function SwipeDiscover() {
                 lifeScore={currentListing.lifeScore}
                 scoreBreakdown={currentListing.scoreBreakdown}
                 profile={profile}
+                onExpand={() => setDetailListing(currentListing)}
               />
             </motion.div>
           </AnimatePresence>
@@ -318,6 +322,13 @@ export default function SwipeDiscover() {
             <Button variant="outline" size="lg" className="w-14 h-14 rounded-full border-2 border-red-200 hover:bg-red-50 p-0" onClick={() => handleSwipe("left")}>
               <X className="w-6 h-6 text-red-500" />
             </Button>
+            <button
+              onClick={() => setDetailListing(currentListing)}
+              className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-full border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition-all"
+            >
+              <Info className="w-4 h-4" />
+              <span className="text-[10px] font-medium">Details</span>
+            </button>
             <Button size="lg" className="w-14 h-14 rounded-full bg-green-500 hover:bg-green-400 p-0 shadow-lg shadow-green-500/30" onClick={() => handleSwipe("right")}>
               <Heart className="w-6 h-6 text-white" />
             </Button>
@@ -327,6 +338,17 @@ export default function SwipeDiscover() {
         </div>
       )}
 
+      <AnimatePresence>
+        {detailListing && (
+          <PropertyDetailPanel
+            listing={detailListing}
+            lifeScore={detailListing.lifeScore}
+            scoreBreakdown={detailListing.scoreBreakdown}
+            profile={profile}
+            onClose={() => setDetailListing(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

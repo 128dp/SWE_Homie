@@ -1,13 +1,13 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Bed, Maximize2 } from "lucide-react";
+import { MapPin, Bed, Maximize2, Expand } from "lucide-react";
 import LifestyleMatchPanel from "./LifestyleMatchPanel";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/navigation";
 
-export default function PropertyCard({ listing, lifeScore, scoreBreakdown, profile }) {
+export default function PropertyCard({ listing, lifeScore, scoreBreakdown, profile, onExpand }) {
   const typeLabels = {
     hdb: "HDB",
     condo: "Condo",
@@ -109,6 +109,15 @@ export default function PropertyCard({ listing, lifeScore, scoreBreakdown, profi
         )}
 
         <LifestyleMatchPanel listing={listing} profile={profile} scoreBreakdown={scoreBreakdown} />
+
+        {/* Expand button */}
+        <button
+          onClick={e => { e.stopPropagation(); onExpand?.(); }}
+          className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-all text-xs font-medium"
+        >
+          <Expand className="w-3.5 h-3.5" />
+          More details
+        </button>
       </div>
     </div>
   );
