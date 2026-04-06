@@ -263,6 +263,32 @@ function computeScoreFromAmenities(amenities, profile, listingCoords) {
     }
   }
 
+  // Custom amenities
+  const customAmenityData = amenities.customAmenities || {};
+  for (const custom of (profile.custom_amenities || [])) {
+    if (!customAmenityData[custom.query]) continue;
+    totalCriteria++;
+    const { distance_m, name } = customAmenityData[custom.query];
+    const threshold = custom.minutes || 10;
+    const mode = custom.mode || 'walk';
+    const buffer = mode === 'walk' ? 3 : 5;
+    const minutes = distanceToMinutes(distance_m, mode);
+
+    if (minutes <= threshold) {
+      totalPoints += 1;
+      breakdown[`custom_${custom.query}`] = { label: custom.label, status: 'full', points: 1, minutes: Math.round(minutes), name };
+    } else if (minutes <= threshold + buffer) {
+      totalPoints += 0.5;
+      breakdown[`custom_${custom.query}`] = { label: custom.label, status: 'partial', points: 0.5, minutes: Math.round(minutes), name };
+    } else {
+      breakdown[`custom_${custom.query}`] = { label: custom.label, status: 'none', points: 0, minutes: Math.round(minutes), name };
+    }
+  }
+
+  // Inside computeScoreFromAmenities, at the start of the custom amenities loop
+  console.log('profile.custom_amenities:', profile.custom_amenities);
+  console.log('amenities.customAmenities:', amenities.customAmenities);
+
   // Important places
   for (const place of (profile.important_places || [])) {
     if (!place.lat || !place.lng || !listingCoords) continue;
@@ -421,6 +447,181 @@ app.post('/api/precompute-single-listing', async (req, res) => {
   }
 });
 
+// ─── POST /api/precompute-custom-amenities ────────────────────────────────────
+app.post('/api/precompute-custom-amenities', async (req, res) => {
+  const { userId, customAmenities } = req.body;
+  if (!userId || !customAmenities?.length) 
+    return res.json({ message: 'No custom amenities to process', processed: 0 });
+
+  try {
+    const { data: listings } = await supabase
+      .from('listings')
+      .select('id, lat, lng')
+      .eq('status', 'active')
+      .not('lat', 'is', null);
+
+    const token = await getOneMapToken();
+    const rows = [];
+
+    for (const custom of customAmenities) {
+      let results = [];
+      try {
+        // Use Overpass API to search by name/amenity across Singapore
+        // Singapore bounding box: 1.1,103.6,1.5,104.1
+        
+        // Map common search terms to OSM tags
+        const OSM_TAG_MAP = {
+          'gym': 'leisure=fitness_centre',
+          'fitness': 'leisure=fitness_centre',
+          'yoga': 'sport=yoga',
+          'yoga studio': 'sport=yoga',
+          'swimming pool': 'leisure=swimming_pool',
+          'pool': 'leisure=swimming_pool',
+          'park': 'leisure=park',
+          'playground': 'leisure=playground',
+          'pet shop': 'shop=pet',
+          'pets': 'shop=pet',
+          'supermarket': 'shop=supermarket',
+          'grocery': 'shop=supermarket',
+          'clinic': 'amenity=clinic',
+          'pharmacy': 'amenity=pharmacy',
+          'school': 'amenity=school',
+          'library': 'amenity=library',
+          'food court': 'amenity=food_court',
+          'hawker': 'amenity=food_court',
+          'restaurant': 'amenity=restaurant',
+          'cafe': 'amenity=cafe',
+          'coffee': 'amenity=cafe',
+          'church': 'amenity=place_of_worship',
+          'mosque': 'amenity=place_of_worship',
+          'temple': 'amenity=place_of_worship',
+          'childcare': 'amenity=childcare',
+          'kindergarten': 'amenity=kindergarten',
+          'community centre': 'amenity=community_centre',
+          'cc': 'amenity=community_centre',
+        };
+
+        const queryLower = custom.query.toLowerCase();
+        const osmTag = OSM_TAG_MAP[queryLower];
+
+        let overpassQuery;
+        if (osmTag) {
+          const [key, value] = osmTag.split('=');
+          overpassQuery = `
+            [out:json][timeout:25];
+            (
+              node["${key}"="${value}"](1.1,103.6,1.5,104.1);
+              way["${key}"="${value}"](1.1,103.6,1.5,104.1);
+            );
+            out center;
+          `;
+        } else {
+          // Fall back to name search for unrecognised terms
+          overpassQuery = `
+            [out:json][timeout:25];
+            (
+              node["name"~"${custom.query}",i](1.1,103.6,1.5,104.1);
+              way["name"~"${custom.query}",i](1.1,103.6,1.5,104.1);
+            );
+            out center;
+          `;
+        }
+
+        const overpassRes = await fetch('https://overpass-api.de/api/interpreter', {
+          method: 'POST',
+          body: overpassQuery,
+        });
+        const data = await overpassRes.json();
+        results = (data.elements || []).map(r => ({
+          ...r,
+          lat: r.lat ?? r.center?.lat,
+          lon: r.lon ?? r.center?.lon,
+          tags: r.tags || {},
+        })).filter(r => r.lat && r.lon);
+        console.log(`Overpass results for "${custom.query}":`, results.length);
+      } catch (err) {
+        console.log(`Overpass error for ${custom.query}:`, err.message);
+        continue;
+      }
+
+      if (results.length === 0) {
+        console.log(`No Overpass results for: ${custom.query}`);
+        continue;
+      }
+
+      if (results.length === 0) continue;
+
+      // For each listing, find nearest result from the search
+      for (const listing of listings) {
+        let nearest = null;
+        let minDist = Infinity;
+
+        for (const r of results) {
+          const dist = haversineDistance(
+            listing.lat, listing.lng,
+            r.lat, r.lon
+          );
+          if (dist < minDist) {
+            minDist = dist;
+            nearest = { 
+              name: r.tags?.name || r.tags?.['name:en'] || r.tags?.operator || custom.query, 
+              distance_m: dist 
+            };
+          }
+        }
+
+        if (nearest) {
+          rows.push({
+            user_id: userId,
+            listing_id: listing.id,
+            query: custom.query,
+            name: nearest.name,
+            distance_m: nearest.distance_m,
+          });
+        }
+      }
+    }
+
+    console.log('Rows to upsert:', rows.length);
+    if (rows.length > 0) {
+      const { error } = await supabase
+        .from('custom_amenity_scores')
+        .upsert(rows, { onConflict: 'user_id,listing_id,query' });
+      if (error) {
+        console.log('Upsert error:', error);
+        throw error;
+      } else {
+        console.log('Upsert success!');
+      }
+    }
+
+    // Clean up old queries no longer in profile
+    const activeQueries = customAmenities.map(a => a.query);
+    const { data: existingRows } = await supabase
+      .from('custom_amenity_scores')
+      .select('query')
+      .eq('user_id', userId);
+
+    const queriesToDelete = [...new Set((existingRows || []).map(r => r.query))]
+      .filter(q => !activeQueries.includes(q));
+
+    if (queriesToDelete.length > 0) {
+      for (const q of queriesToDelete) {
+        await supabase
+          .from('custom_amenity_scores')
+          .delete()
+          .eq('user_id', userId)
+          .eq('query', q);
+      }
+      console.log('Cleaned up old queries:', queriesToDelete);
+    }
+
+    res.json({ processed: rows.length, message: 'Custom amenities precomputed!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── POST /api/compute-scores ─────────────────────────────────────────────────
 // Pure math — no API calls. Instant regardless of user count.
 app.post('/api/compute-scores', async (req, res) => {
@@ -435,6 +636,22 @@ app.post('/api/compute-scores', async (req, res) => {
     const { data: amenityRows } = await supabase.from('listing_amenities').select('*');
     const amenityMap = {};
     (amenityRows || []).forEach(a => { amenityMap[a.listing_id] = a; });
+
+    // Load custom amenity scores for this user
+    const { data: customRows } = await supabase
+    .from('custom_amenity_scores')
+    .select('*')
+    .eq('user_id', userId);
+
+    const customAmenityMap = {}; // { listing_id: { query: { name, distance_m } } }
+    for (const row of (customRows || [])) {
+    if (!customAmenityMap[row.listing_id]) customAmenityMap[row.listing_id] = {};
+    customAmenityMap[row.listing_id][row.query] = { name: row.name, distance_m: row.distance_m };
+    }
+
+    // After building customAmenityMap
+    console.log('customRows:', customRows?.length);
+    console.log('customAmenityMap sample:', JSON.stringify(Object.entries(customAmenityMap).slice(0, 2)));
 
     // Geocode any important places that have postal_code but no lat/lng (legacy entries)
     const places = profile.important_places || [];
@@ -456,9 +673,10 @@ app.post('/api/compute-scores', async (req, res) => {
 
     const scores = listings.map(listing => {
       const amenities = amenityMap[listing.id] || {};
+      const customAmenities = customAmenityMap[listing.id] || {};
       const listingCoords = listing.lat && listing.lng ? { lat: listing.lat, lng: listing.lng } : null;
       const { score, breakdown } = computeScoreFromAmenities(
-        { ...amenities, num_bedrooms: listing.num_bedrooms, town: listing.town, price: listing.price }, profile, listingCoords
+        { ...amenities, num_bedrooms: listing.num_bedrooms, town: listing.town, price: listing.price, customAmenities }, profile, listingCoords
       );
       return { user_id: userId, listing_id: listing.id, score, score_breakdown: breakdown, computed_at: new Date().toISOString() };
     });

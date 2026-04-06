@@ -10,6 +10,8 @@ import { Save, Check, Loader2, Train, Bus, Trees, GraduationCap, UtensilsCrossed
 import { toast } from "sonner";
 import TownRanker from "@/components/profile/TownRanker";
 import ImportantPlaces from "@/components/profile/ImportantPlaces";
+import CustomAmenities from "@/components/profile/CustomAmenities";
+import { supabase } from "@/api/apiClient";
 
 const WALK_ONLY = [
   { key: "mrt", label: "MRT Station", icon: Train, walkOnly: true },
@@ -39,6 +41,7 @@ const DEFAULT_FORM = {
   supermarket_enabled: false, supermarket_minutes: 10, supermarket_mode: "walk",
   hospital_enabled: false, hospital_minutes: 15, hospital_mode: "commute",
   polyclinic_enabled: false, polyclinic_minutes: 15, polyclinic_mode: "commute",
+  custom_amenities: [],
 };
 
 function PreferenceRow({ icon: Icon, label, enabledKey, minutesKey, modeKey, walkOnly, form, setForm }) {
@@ -128,17 +131,45 @@ export default function LifestyleProfile() {
     // Trigger LifeScore computation in background
     setComputing(true);
     toast.info("Computing your LifeScores... this may take a moment ⚡");
-    fetch('/api/compute-scores', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.id, profile: data })
-    }).then(r => r.json()).then(result => {
-      setComputing(false);
+
+    try {
+      if (data.custom_amenities?.length > 0) {
+        const res = await fetch('/api/precompute-custom-amenities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            customAmenities: data.custom_amenities
+          })
+        });
+        console.log("CUSTOM AMENITIES BEING SENT:", data.custom_amenities);
+
+        const json = await res.json();
+        console.log("Precompute result:", json);
+      } else {
+        await supabase
+          .from('custom_amenity_scores')
+          .delete()
+          .eq('user_id', user.id);
+      }
+
+      const result = await fetch('/api/compute-scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          profile: data
+        })
+      }).then(r => r.json());
+
       toast.success(`LifeScores ready! ${result.computed} properties scored 🎯`);
-    }).catch(err => {
-      setComputing(false);
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err) {
       console.error('Score computation failed:', err);
-    });
+      toast.error("Something went wrong computing scores");
+    } finally {
+      setComputing(false);
+    }
   };
 
   const formatCurrency = (val) => `$${Number(val).toLocaleString()}`;
@@ -285,6 +316,22 @@ export default function LifestyleProfile() {
               setForm={setForm}
             />
           ))}
+        </CardContent>
+      </Card>
+
+      {/* Custom Amenities */}
+      <Card className="mb-6 border-slate-100">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Custom Amenities</CardTitle>
+          <p className="text-sm text-slate-500">
+            Search for any specific place type you want nearby — e.g. "yoga studio", "pet shop", "korean bbq".
+          </p>
+        </CardHeader>
+        <CardContent>
+          <CustomAmenities
+            amenities={form.custom_amenities || []}
+            onChange={(amenities) => setForm({ ...form, custom_amenities: amenities })}
+          />
         </CardContent>
       </Card>
 

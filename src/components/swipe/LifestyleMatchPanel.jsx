@@ -139,6 +139,46 @@ export default function LifestyleMatchPanel({ listing, profile, scoreBreakdown }
           </div>
         </div>
       )}
+
+      {/* Custom amenities */}
+      {profile.custom_amenities?.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Custom Amenities</p>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            {profile.custom_amenities.map((custom, i) => {
+              const bd = scoreBreakdown?.[`custom_${custom.query}`];
+              return (
+                <div key={i} className="flex items-center gap-1.5">
+                  {!bd ? (
+                    <MinusCircle className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                  ) : bd.status === "full" ? (
+                    <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                  ) : bd.status === "partial" ? (
+                    <CheckCircle2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  )}
+                  <span className={`text-xs ${!bd || bd.status === "none" ? "text-slate-400" : "text-slate-700"}`}>
+                    {custom.label}
+                    {bd?.minutes != null ? ` (${bd.minutes}min)` : !bd ? " (not scored yet)" : ""}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          {/* Show matched place names */}
+          {profile.custom_amenities.map((custom, i) => {
+            const bd = scoreBreakdown?.[`custom_${custom.query}`];
+            if (!bd?.name) return null;
+            return (
+              <p key={i} className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                <MapPin className="w-3 h-3" />
+                {custom.label}: <span className="text-slate-500">{bd.name}</span>
+              </p>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
