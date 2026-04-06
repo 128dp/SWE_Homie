@@ -133,40 +133,37 @@ export default function LifestyleProfile() {
     toast.info("Computing your LifeScores... this may take a moment ⚡");
 
     try {
+      const safeJson = async (res) => {
+        const text = await res.text();
+        try { return { ok: res.ok, data: JSON.parse(text) }; }
+        catch { throw new Error(res.ok ? 'Bad server response' : `Server error ${res.status} — is the backend running?`); }
+      };
+
       if (data.custom_amenities?.length > 0) {
         const res = await fetch('/api/precompute-custom-amenities', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            customAmenities: data.custom_amenities
-          })
+          body: JSON.stringify({ userId: user.id, customAmenities: data.custom_amenities })
         });
-        console.log("CUSTOM AMENITIES BEING SENT:", data.custom_amenities);
-
-        const json = await res.json();
-        console.log("Precompute result:", json);
+        const { ok, data: json } = await safeJson(res);
+        if (!ok) throw new Error(json?.error || 'Custom amenity precompute failed');
       } else {
-        await supabase
-          .from('custom_amenity_scores')
-          .delete()
-          .eq('user_id', user.id);
+        await supabase.from('custom_amenity_scores').delete().eq('user_id', user.id);
       }
 
-      const result = await fetch('/api/compute-scores', {
+      const scoreRes = await fetch('/api/compute-scores', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          profile: data
-        })
-      }).then(r => r.json());
+        body: JSON.stringify({ userId: user.id, profile: data })
+      });
+      const { ok: scoreOk, data: result } = await safeJson(scoreRes);
+      if (!scoreOk) throw new Error(result?.error || 'Score computation failed');
 
-      toast.success(`LifeScores ready! ${result.computed} properties scored 🎯`);
+      toast.success(`LifeScores ready! ${result?.computed ?? 0} properties scored 🎯`);
       setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
       console.error('Score computation failed:', err);
-      toast.error("Something went wrong computing scores");
+      toast.error(`Score computation failed: ${err.message}`);
     } finally {
       setComputing(false);
     }
@@ -254,7 +251,7 @@ export default function LifestyleProfile() {
         <CardContent>
           <TownRanker
             towns={form.preferred_towns || []}
-            onChange={(towns) => setForm({ ...form, preferred_towns: towns })}
+            onChange={(towns) => setForm(prev => ({ ...prev, preferred_towns: towns }))}
           />
         </CardContent>
       </Card>
@@ -268,7 +265,7 @@ export default function LifestyleProfile() {
         <CardContent>
           <ImportantPlaces
             places={form.important_places || []}
-            onChange={(places) => setForm({ ...form, important_places: places })}
+            onChange={(places) => setForm(prev => ({ ...prev, important_places: places }))}
           />
         </CardContent>
       </Card>
@@ -330,7 +327,7 @@ export default function LifestyleProfile() {
         <CardContent>
           <CustomAmenities
             amenities={form.custom_amenities || []}
-            onChange={(amenities) => setForm({ ...form, custom_amenities: amenities })}
+            onChange={(amenities) => setForm(prev => ({ ...prev, custom_amenities: amenities }))}
           />
         </CardContent>
       </Card>

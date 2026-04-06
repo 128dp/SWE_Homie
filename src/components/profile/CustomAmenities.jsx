@@ -43,7 +43,7 @@ export default function CustomAmenities({ amenities = [], onChange }) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
               value={query}
-              onChange={(e) => { setQuery(e.target.value); setSelected(null); }}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="e.g. yoga studio, pet shop..."
               className="pl-9"
             />

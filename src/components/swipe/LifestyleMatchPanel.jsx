@@ -36,7 +36,8 @@ export default function LifestyleMatchPanel({ listing, profile, scoreBreakdown }
 
   const enabledPrefs = getEnabledPreferences(profile);
   const hasImportantPlaces = profile.important_places?.length > 0;
-  if (enabledPrefs.length === 0 && !hasImportantPlaces) return null;
+  const hasCustom = profile.custom_amenities?.length > 0;
+  if (enabledPrefs.length === 0 && !hasImportantPlaces && !hasCustom) return null;
 
   const budgetBreakdown = scoreBreakdown?.budget;
   const locationBreakdown = scoreBreakdown?.location;

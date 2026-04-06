@@ -36,11 +36,14 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
 }
 
 // ─── Convert distance to minutes ─────────────────────────────────────────────
-// walk: 80m/min (4.8km/h), commute/transit: 300m/min (18km/h), drive: 500m/min (30km/h avg SG)
+// Input is straight-line (Haversine) distance. Apply detour factors for Singapore:
+//   Walk:    ×1.6 detour (HDB blocks, overhead bridges, underpasses) → 5 km/h = 83 m/min
+//   Drive:   ×1.4 detour → ~22 km/h effective in SG urban traffic
+//   Commute: ×1.6 detour → ~12 km/h effective (includes walk-to-station + waiting)
 function distanceToMinutes(metres, mode = 'walk') {
-  if (mode === 'walk') return metres / 80;
-  if (mode === 'drive') return metres / 500;
-  return metres / 300; // commute / transit
+  if (mode === 'walk')   return (metres * 1.6) / 83;
+  if (mode === 'drive')  return (metres * 1.4) / 367;
+  return (metres * 1.6) / 200; // commute / transit
 }
 
 // ─── OneMap token auto-refresh ────────────────────────────────────────────────
@@ -285,10 +288,6 @@ function computeScoreFromAmenities(amenities, profile, listingCoords) {
     }
   }
 
-  // Inside computeScoreFromAmenities, at the start of the custom amenities loop
-  console.log('profile.custom_amenities:', profile.custom_amenities);
-  console.log('amenities.customAmenities:', amenities.customAmenities);
-
   // Important places
   for (const place of (profile.important_places || [])) {
     if (!place.lat || !place.lng || !listingCoords) continue;
@@ -460,7 +459,6 @@ app.post('/api/precompute-custom-amenities', async (req, res) => {
       .eq('status', 'active')
       .not('lat', 'is', null);
 
-    const token = await getOneMapToken();
     const rows = [];
 
     for (const custom of customAmenities) {
@@ -529,7 +527,8 @@ app.post('/api/precompute-custom-amenities', async (req, res) => {
 
         const overpassRes = await fetch('https://overpass-api.de/api/interpreter', {
           method: 'POST',
-          body: overpassQuery,
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `data=${encodeURIComponent(overpassQuery.trim())}`,
         });
         const data = await overpassRes.json();
         results = (data.elements || []).map(r => ({
@@ -548,8 +547,6 @@ app.post('/api/precompute-custom-amenities', async (req, res) => {
         console.log(`No Overpass results for: ${custom.query}`);
         continue;
       }
-
-      if (results.length === 0) continue;
 
       // For each listing, find nearest result from the search
       for (const listing of listings) {
@@ -645,13 +642,9 @@ app.post('/api/compute-scores', async (req, res) => {
 
     const customAmenityMap = {}; // { listing_id: { query: { name, distance_m } } }
     for (const row of (customRows || [])) {
-    if (!customAmenityMap[row.listing_id]) customAmenityMap[row.listing_id] = {};
-    customAmenityMap[row.listing_id][row.query] = { name: row.name, distance_m: row.distance_m };
+      if (!customAmenityMap[row.listing_id]) customAmenityMap[row.listing_id] = {};
+      customAmenityMap[row.listing_id][row.query] = { name: row.name, distance_m: row.distance_m };
     }
-
-    // After building customAmenityMap
-    console.log('customRows:', customRows?.length);
-    console.log('customAmenityMap sample:', JSON.stringify(Object.entries(customAmenityMap).slice(0, 2)));
 
     // Geocode any important places that have postal_code but no lat/lng (legacy entries)
     const places = profile.important_places || [];

@@ -1,6 +1,6 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Bed, Maximize2, Expand } from "lucide-react";
+import { MapPin, Bed, Maximize2, ChevronRight } from "lucide-react";
 import LifestyleMatchPanel from "./LifestyleMatchPanel";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
@@ -110,13 +110,12 @@ export default function PropertyCard({ listing, lifeScore, scoreBreakdown, profi
 
         <LifestyleMatchPanel listing={listing} profile={profile} scoreBreakdown={scoreBreakdown} />
 
-        {/* Expand button */}
         <button
           onClick={e => { e.stopPropagation(); onExpand?.(); }}
-          className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-all text-xs font-medium"
+          className="mt-3 -mx-4 -mb-4 px-4 py-3 flex items-center justify-between border-t border-slate-100 hover:bg-slate-50 transition-colors rounded-b-2xl w-[calc(100%+2rem)]"
         >
-          <Expand className="w-3.5 h-3.5" />
-          More details
+          <span className="text-xs font-semibold text-slate-500">View details & map</span>
+          <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
         </button>
       </div>
     </div>
