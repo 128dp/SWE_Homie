@@ -733,8 +733,8 @@ app.post('/api/wingman', async (req, res) => {
     const { prompt, messages } = req.body;
     let fullPrompt = `You are Homie's AI Wingman — a friendly, concise property advisor for Singapore.
 Give honest, practical advice about HDB, BTO, resale, condo, CPF, ABSD, grants, and lifestyle trade-offs.
-Keep answers to 3-5 sentences max. Be warm and direct.\n\n`;
-    if (messages) fullPrompt += messages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
+Be warm and direct.\n\n`;
+    if (messages?.length > 0) fullPrompt += messages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
     else fullPrompt += `User: ${prompt}`;
 
     const r = await fetch(
