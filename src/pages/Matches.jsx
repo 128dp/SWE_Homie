@@ -79,7 +79,8 @@ export default function Matches() {
   const [showComparison, setShowComparison] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [detailMatch, setDetailMatch] = useState(null);
-
+  const [sortMode, setSortMode] = useState("recent"); 
+  
   useEffect(() => {
     const load = async () => {
       const me = await api.auth.me();
@@ -91,7 +92,7 @@ export default function Matches() {
       } else {
         data = await api.entities.Match.filter({ buyer_id: me.id });
       }
-      const sorted = (data || []).sort((a, b) => (b.compatibility_score ?? 0) - (a.compatibility_score ?? 0));
+      const sorted = data || [];
 
       // Load profile + listing details + score breakdowns in parallel
       const listingIds = sorted.map(m => m.listing_id).filter(Boolean);
@@ -139,6 +140,7 @@ export default function Matches() {
           listing: listingMap[m.listing_id] || null,
           scoreBreakdown: scoreMap[m.listing_id] || {},
           hasUnread: lastMsg && lastMsg.user_id !== me.id,
+          lastMessageAt: lastMsg?.created_at || null,
         };
       }));
       setLoading(false);
@@ -173,6 +175,16 @@ export default function Matches() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+        {!isBuyer && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSortMode(sortMode === "recent" ? "score" : "recent")}
+          >
+            {sortMode === "recent" ? "Sort by LifeScore" : "Sort by Recent Chat"}
+          </Button>
+        )}
+
         {isBuyer && matches.length > 0 && (
           <Button
             variant="outline"
@@ -225,6 +237,23 @@ export default function Matches() {
         <div className="space-y-3">
           {matches
             .filter(m => showArchived ? m.status === 'archived' : m.status !== 'archived')
+            .sort((a, b) => {
+              if (isBuyer) return 0; // buyers keep original order
+
+              if (sortMode === "score") {
+                return (b.compatibility_score ?? 0) - (a.compatibility_score ?? 0);
+              }
+
+              // AGENT: sort by recent chat
+              const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+              const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+
+              // unread messages first
+              if (a.hasUnread && !b.hasUnread) return -1;
+              if (!a.hasUnread && b.hasUnread) return 1;
+
+              return bTime - aTime;
+            })
             .map((match) => (
             <SwipeableMatchCard
               key={match.id}
