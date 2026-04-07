@@ -162,7 +162,11 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
             const d = haversine(listing.lat, listing.lng, row.lat, row.lng);
             return d < best.d ? { row, d } : best;
           }, { row: data[0], d: Infinity }).row;
-          locs[key] = { lat: nearest.lat, lng: nearest.lng, label: bd.name };
+          locs[key] = { 
+            lat: nearest.lat, 
+            lng: nearest.lng, 
+            label: bd.nearest_name || bd.name 
+          };
         })
       );
     }
@@ -170,8 +174,11 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
     // Custom amenities — coords already in breakdown
     for (const custom of (profile?.custom_amenities || [])) {
       const bd = scoreBreakdown[`custom_${custom.query}`];
+
+      console.log("CUSTOM AMENITY:", custom, bd);
+
       if (bd?.lat != null && bd?.lng != null) {
-        locs[`custom_${custom.query}`] = { lat: bd.lat, lng: bd.lng, label: custom.label };
+        locs[`custom_${custom.query}`] = { lat: bd.lat, lng: bd.lng, label: bd.name, type: custom.label };
       }
     }
 
@@ -482,7 +489,7 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
                       <AutoPopup markerRef={markerRef} active={active} />
                       <Popup>
                         <div style={{ minWidth: 120 }}>
-                          <p className="text-xs font-semibold m-0" style={{ color: pinColor }}>{meta?.label ?? loc.label}</p>
+                          <p className="text-xs font-semibold m-0" style={{ color: pinColor }}>{meta?.label || loc.type || loc.label}</p>
                           <p className="text-[11px] text-slate-600 m-0 mt-0.5 font-medium">{loc.label}</p>
                           {bd?.minutes != null && (
                             <p className="text-[11px] text-slate-400 m-0 mt-0.5">{bd.minutes} min away</p>
