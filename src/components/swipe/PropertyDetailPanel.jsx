@@ -107,8 +107,10 @@ const TYPE_LABELS = { hdb: "HDB", condo: "Condo", landed: "Landed", executive_co
 // ─── Main panel ───────────────────────────────────────────────────────────────
 export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, lifeScore, onClose }) {
   const [focusedKey,  setFocusedKey]  = useState(null);
+  /** @type {[Record<string,{lat:number,lng:number,label:string}>, Function]} */
   const [amenityLocs, setAmenityLocs] = useState({});   // key → { lat, lng, label }
   const [loadingLocs, setLoadingLocs] = useState(true);
+  /** @type {React.MutableRefObject<Record<string,React.RefObject<any>>>} */
   const markerRefs = useRef({});  // key → leaflet marker ref
 
   const hasCoords  = !!(listing.lat && listing.lng);
@@ -125,36 +127,29 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
     const locs = {};
     const tasks = [];
 
+    // Bus stop: always show on map regardless of profile settings.
+    // Use precomputed coords if available, else proxy through backend.
+    {
+      const busBd = scoreBreakdown?.bus;
+      if (busBd?.lat != null && busBd?.lng != null) {
+        locs.bus = { lat: busBd.lat, lng: busBd.lng, label: busBd.name || "Bus Stop" };
+      } else {
+        tasks.push((async () => {
+          try {
+            const res = await fetch(`/api/nearest-bus-stop?lat=${listing.lat}&lng=${listing.lng}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.lat != null) locs.bus = { lat: data.lat, lng: data.lng, label: data.name || "Bus Stop" };
+            }
+          } catch {}
+        })());
+      }
+    }
+
     for (const [key] of Object.entries(AMENITY_META)) {
+      if (key === "bus") continue; // handled above
       const bd = scoreBreakdown[key];
       if (!bd) continue;
-
-      // Bus: use precomputed coords if available, else fall back to Overpass
-      if (key === "bus") {
-        if (bd.lat != null && bd.lng != null) {
-          locs.bus = { lat: bd.lat, lng: bd.lng, label: bd.name || "Bus Stop" };
-        } else {
-          // Fallback: query Overpass directly (POST with timeout)
-          tasks.push((async () => {
-            try {
-              const query = `[out:json][timeout:10];node(around:400,${listing.lat},${listing.lng})[highway=bus_stop];out 1;`;
-              const controller = new AbortController();
-              const timer = setTimeout(() => controller.abort(), 12000);
-              const res = await fetch("https://overpass-api.de/api/interpreter", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: `data=${encodeURIComponent(query)}`,
-                signal: controller.signal,
-              });
-              clearTimeout(timer);
-              const data = await res.json();
-              const node = data.elements?.[0];
-              if (node) locs.bus = { lat: node.lat, lng: node.lon, label: node.tags?.name || node.tags?.ref || "Bus Stop" };
-            } catch {}
-          })());
-        }
-        continue;
-      }
 
       if (!bd.name) continue;
       const table = AMENITY_TABLE_MAP[key];
@@ -270,25 +265,29 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
             <div className="flex-1 overflow-y-auto">
               <div className="px-3 py-3 space-y-4">
 
-                {scoreBreakdown && Object.keys(AMENITY_META).some(k => scoreBreakdown[k]) && (
+                {(scoreBreakdown || !loadingLocs) && (
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
                       Nearby — tap to highlight
                     </p>
                     <div className="space-y-0.5">
                       {Object.entries(AMENITY_META).map(([key, { label, Icon, color, bg }]) => {
-                        const bd       = scoreBreakdown[key];
-                        if (!bd) return null;
-                        const active   = focusedKey === key;
-                        const hasLoc   = !!amenityLocs[key];
-                        const noData   = bd.minutes === null;
+                        const bd     = scoreBreakdown?.[key];
+                        const hasLoc = !!amenityLocs[key];
+                        // Bus always shown (we always fetch it); others require a breakdown entry
+                        if (key !== "bus" && !bd) return null;
+                        // Bus: hide entirely only if both no breakdown and no location yet (and done loading)
+                        if (key === "bus" && !bd && !hasLoc && !loadingLocs) return null;
+                        const active = focusedKey === key;
+                        const noData = bd ? bd.minutes === null : true;
+                        const displayName = bd?.name || (hasLoc ? amenityLocs[key].label : null);
                         return (
                           <button
                             key={key}
                             onClick={() => hasLoc && toggleFocus(key)}
                             className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all ${
                               active  ? "ring-1 ring-inset"
-                              : noData  ? "opacity-40 cursor-default"
+                              : noData && !hasLoc ? "opacity-40 cursor-default"
                               : hasLoc  ? "hover:bg-slate-50 cursor-pointer"
                               :           "cursor-default"
                             }`}
@@ -299,10 +298,10 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-semibold text-slate-700 truncate">{label}</p>
-                              {bd.name && <p className="text-[10px] text-slate-400 truncate">{bd.name}</p>}
+                              {displayName && <p className="text-[10px] text-slate-400 truncate">{displayName}</p>}
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
-                              {bd.minutes != null && (
+                              {bd?.minutes != null && (
                                 <span className={`text-xs font-bold tabular-nums ${
                                   bd.status === "full" ? "text-green-600"
                                   : bd.status === "partial" ? "text-amber-500"
@@ -311,11 +310,13 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
                                   {bd.minutes} min
                                 </span>
                               )}
-                              {noData    ? <MinusCircle className="w-3.5 h-3.5 text-slate-300" />
-                              : loadingLocs && !hasLoc ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-300" />
-                              : active    ? <CheckCircle2 className="w-3.5 h-3.5" style={{ color }} />
-                              : bd.status === "none" ? <XCircle className="w-3.5 h-3.5 text-red-400" />
-                              : <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
+                              {loadingLocs && !hasLoc && key === "bus"
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-300" />
+                                : noData && !hasLoc ? <MinusCircle className="w-3.5 h-3.5 text-slate-300" />
+                                : loadingLocs && !hasLoc ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-300" />
+                                : active    ? <CheckCircle2 className="w-3.5 h-3.5" style={{ color }} />
+                                : bd?.status === "none" ? <XCircle className="w-3.5 h-3.5 text-red-400" />
+                                : <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
                             </div>
                           </button>
                         );

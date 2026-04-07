@@ -821,4 +821,15 @@ app.get('/api/onemap-token', async (req, res) => {
   res.json({ token });
 });
 
+// ─── GET /api/nearest-bus-stop?lat=X&lng=Y ───────────────────────────────────
+// Proxies Overpass API server-side so browser CORS / timeouts don't affect it
+app.get('/api/nearest-bus-stop', async (req, res) => {
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  if (isNaN(lat) || isNaN(lng)) return res.status(400).json({ error: 'Missing lat/lng' });
+  const result = await fetchNearestBusStopCoords(lat, lng);
+  if (!result) return res.status(404).json({ error: 'No bus stop found' });
+  res.json(result);
+});
+
 app.listen(PORT, () => console.log(`🏠 Homie API running on http://localhost:${PORT}`));
