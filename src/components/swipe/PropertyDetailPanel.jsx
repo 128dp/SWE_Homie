@@ -74,6 +74,70 @@ async function fetchOSRMRoute(from, to, mode) {
   return null;
 }
 
+async function fetchOneMapRoute(from, to, mode) {
+  try {
+    // Get token from your backend to avoid exposing credentials
+    const tokenRes = await fetch('http://localhost:3001/api/onemap-token');
+    const { token } = await tokenRes.json();
+    if (!token) return null;
+
+    const oneMapMode = mode === 'walk' ? 'walk' : mode === 'drive' ? 'drive' : 'pt';
+    const url = `https://www.onemap.gov.sg/api/public/routingsvc/route?start=${from.lat},${from.lng}&end=${to.lat},${to.lng}&routeType=${oneMapMode}&token=${token}`;
+    
+    const res = await fetch(url);
+    const data = await res.json();
+    console.log('OneMap routing response:', JSON.stringify(data).slice(0, 300));
+
+    if (data.status !== 1 && !data.route_summary) return null;
+
+    const summary = data.route_summary || data.plan?.itineraries?.[0];
+    if (!summary) return null;
+
+    // Extract duration and distance
+    let duration, distance;
+    if (data.route_summary) {
+      // Walk/drive response
+      duration = Math.round(data.route_summary.total_time / 60);
+      distance = data.route_summary.total_distance;
+    } else {
+      // PT response
+      duration = Math.round(data.plan.itineraries[0].duration / 60);
+      distance = data.plan.itineraries[0].legs?.reduce((sum, leg) => sum + (leg.distance || 0), 0) || 0;
+    }
+
+    // Extract polyline coords if available
+    let coords = null;
+    if (data.route_geometry) {
+      // Decode encoded polyline
+      coords = decodePolyline(data.route_geometry);
+    } else if (data.plan?.itineraries?.[0]?.legs) {
+      coords = data.plan.itineraries[0].legs.flatMap(leg =>
+        leg.legGeometry?.points ? decodePolyline(leg.legGeometry.points) : []
+      );
+    }
+
+    return { duration, distance, coords };
+  } catch {
+    return null;
+  }
+}
+
+// Decode Google-encoded polyline format (used by OneMap)
+function decodePolyline(encoded) {
+  const coords = [];
+  let index = 0, lat = 0, lng = 0;
+  while (index < encoded.length) {
+    let b, shift = 0, result = 0;
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lat += (result & 1) ? ~(result >> 1) : result >> 1;
+    shift = 0; result = 0;
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lng += (result & 1) ? ~(result >> 1) : result >> 1;
+    coords.push([lat / 1e5, lng / 1e5]);
+  }
+  return coords;
+}
+
 // Find nearest bus stop via Overpass (OSM), returns {lat, lng, name} or null
 async function fetchNearestBusStop(lat, lng) {
   try {
@@ -144,7 +208,7 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
 
   const hasCoords  = !!(listing.lat && listing.lng);
   const scoreColor = lifeScore >= 70 ? "#22c55e" : lifeScore >= 40 ? "#f97316" : "#ef4444";
-  const isTransit  = travelMode === "train" || travelMode === "bus";
+  const isTransit = travelMode === "train" || travelMode === "bus";
 
   // ── Map state ──────────────────────────────────────────────────────────────
   // In detail view: fly to selected amenity; in directions: fit route bounds
@@ -172,23 +236,56 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
   // ── Fetch walk path in detail view whenever selectedLoc changes ───────────
   useEffect(() => {
     if (!hasCoords || !selectedLoc?.lat) { setDetailRoute(null); return; }
-    fetchOSRMRoute(
-      { lat: listing.lat, lng: listing.lng },
-      { lat: selectedLoc.lat, lng: selectedLoc.lng },
-      "walk"
-    ).then(r => setDetailRoute(r ? { coords: r.coords } : null));
+    (async () => {
+      const result = await fetchOneMapRoute(
+        { lat: listing.lat, lng: listing.lng },
+        { lat: selectedLoc.lat, lng: selectedLoc.lng },
+        "walk"
+      ) || await fetchOSRMRoute(
+        { lat: listing.lat, lng: listing.lng },
+        { lat: selectedLoc.lat, lng: selectedLoc.lng },
+        "walk"
+      );
+      setDetailRoute(result ? { coords: result.coords } : null);
+    })();
   }, [selectedLoc]);
 
   // ── Fetch OSRM route when mode/dir changes in directions view ─────────────
   useEffect(() => {
-    if (view !== "directions" || isTransit || !hasCoords || !selectedLoc?.lat) return;
+    if (view !== "directions" || !hasCoords || !selectedLoc?.lat) return;
     setLoadingRoute(true);
     setRoute(null);
-    fetchOSRMRoute(
-      { lat: dirFrom.lat, lng: dirFrom.lng },
-      { lat: dirTo.lat,   lng: dirTo.lng   },
-      travelMode
-    ).then(r => { setRoute(r); setLoadingRoute(false); });
+    (async () => {
+      let result = null;
+
+      if (travelMode === "train" || travelMode === "bus") {
+        result = await fetchOneMapRoute(
+          { lat: dirFrom.lat, lng: dirFrom.lng },
+          { lat: dirTo.lat, lng: dirTo.lng },
+          "pt"
+        );
+        // If OneMap PT fails, fall back to haversine estimate so UI always shows something
+        if (!result) {
+          const est = transitEstimate(straightDist, travelMode);
+          if (est) result = { duration: est.mins, distance: est.dist, coords: null };
+        }
+      } else {
+        result =
+          await fetchOneMapRoute(
+            { lat: dirFrom.lat, lng: dirFrom.lng },
+            { lat: dirTo.lat, lng: dirTo.lng },
+            travelMode
+          ) ||
+          await fetchOSRMRoute(
+            { lat: dirFrom.lat, lng: dirFrom.lng },
+            { lat: dirTo.lat, lng: dirTo.lng },
+            travelMode
+          );
+      }
+
+      setRoute(result);
+      setLoadingRoute(false);
+    })();
   }, [view, travelMode, dirFlipped]);
 
   // ── Amenity click ──────────────────────────────────────────────────────────
@@ -311,16 +408,14 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
                       const active = travelMode === key;
                       const isTr   = key === "train" || key === "bus";
                       const est    = transitEstimate(straightDist, key);
-                      const timeLabel = active && isTr && est ? `~${est.mins}m`
-                        : active && route ? `${route.duration}m`
-                        : null;
+                      const timeLabel = active && route ? `${route.duration}m` : null;
                       return (
                         <button key={key} onClick={() => { setTravelMode(key); setRoute(null); }}
                           style={active ? { borderColor: color, backgroundColor: color + "14", color } : {}}
                           className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border text-xs font-medium transition-all
                             ${active ? "" : "border-slate-200 text-slate-400 hover:bg-slate-50"}`}
                         >
-                          {loadingRoute && active && !isTr
+                          {loadingRoute && active
                             ? <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" style={{ color }} />
                             : <ModeIcon className="w-3.5 h-3.5 flex-shrink-0" />
                           }
@@ -332,18 +427,13 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
 
                   {/* Result */}
                   <div className="flex-1 px-4 py-4">
-                    {!isTransit && route ? (
-                      <div>
-                        <p className="text-3xl font-bold text-slate-900">{route.duration} <span className="text-base font-normal text-slate-500">min</span></p>
-                        <p className="text-xs text-slate-400 mt-1">{fmtDist(route.distance)} · via OpenStreetMap</p>
-                      </div>
-                    ) : isTransit && transitEst ? (
-                      <div>
-                        <p className="text-3xl font-bold text-slate-900">~{transitEst.mins} <span className="text-base font-normal text-slate-500">min</span></p>
-                        <p className="text-xs text-slate-400 mt-1">~{fmtDist(transitEst.dist)} · estimated</p>
-                        <p className="text-[10px] text-slate-300 mt-1">Includes walk & wait time</p>
-                      </div>
-                    ) : loadingRoute ? (
+                  {route ? (
+                    <div>
+                      <p className="text-3xl font-bold text-slate-900">{route.duration} <span className="text-base font-normal text-slate-500">min</span></p>
+                      <p className="text-xs text-slate-400 mt-1">{fmtDist(route.distance)} · {route.coords ? "via OneMap" : "estimated"}</p>
+                      {isTransit && <p className="text-[10px] text-slate-300 mt-1">Includes walk & wait time</p>}
+                    </div>
+                  ) : loadingRoute ? (
                       <div className="flex items-center gap-2 text-sm text-slate-400">
                         <Loader2 className="w-4 h-4 animate-spin" /> Calculating…
                       </div>
@@ -470,6 +560,68 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
                         </div>
                       </div>
                     )}
+
+                    {profile?.custom_amenities?.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Custom Amenities</p>
+                        <div className="space-y-0.5">
+                          {profile.custom_amenities.map((custom, i) => {
+                            const bd = scoreBreakdown?.[`custom_${custom.query}`];
+                            const key = `custom_${custom.query}`;
+                            const isSelected = selectedKey === key;
+                            const hasCoords = !!(bd?.lat && bd?.lng);
+                            return (
+                              <button
+                                key={i}
+                                onClick={() => {
+                                  if (!hasCoords) return;
+                                  if (isSelected) { setSelectedKey(null); setSelectedLoc(null); return; }
+                                  setSelectedKey(key);
+                                  setView("detail");
+                                  setSelectedLoc({ 
+                                    lat: bd.lat, 
+                                    lng: bd.lng, 
+                                    label: custom.label, 
+                                    address: `${bd.name}, Singapore` 
+                                  });
+                                }}
+                                className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all ${
+                                  isSelected ? "bg-indigo-50 ring-1 ring-indigo-200"
+                                  : hasCoords ? "hover:bg-slate-50 cursor-pointer"
+                                  : "opacity-40 cursor-default"
+                                }`}
+                              >
+                                <div className="w-7 h-7 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
+                                  <MapPin className="w-3.5 h-3.5 text-purple-500" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-slate-700 truncate">{custom.label}</p>
+                                  {bd?.name && <p className="text-[10px] text-slate-400 truncate">{bd.name}</p>}
+                                  {!bd && <p className="text-[10px] text-slate-300">not scored yet</p>}
+                                </div>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  {bd?.minutes != null && (
+                                    <span className={`text-xs font-bold tabular-nums ${
+                                      bd.status === "full" ? "text-green-600" 
+                                      : bd.status === "partial" ? "text-amber-500" 
+                                      : "text-slate-400"
+                                    }`}>
+                                      {bd.minutes}m
+                                    </span>
+                                  )}
+                                  {!bd ? <MinusCircle className="w-3.5 h-3.5 text-slate-300" />
+                                    : isSelected ? <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500" />
+                                    : bd.status === "full" ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                                    : bd.status === "partial" ? <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
+                                    : <XCircle className="w-3.5 h-3.5 text-red-400" />}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
 
                     {profile?.important_places?.length > 0 && (
                       <div>

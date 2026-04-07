@@ -2,10 +2,11 @@ import React, { useState, useEffect } from "react";
 import { api, supabase } from "@/api/apiClient";
 import { createPageUrl } from "../utils";
 import { Link } from "react-router-dom";
-import { Compass, Settings, MessageSquare, ArrowRight, AlertCircle, Bed, Maximize2, MapPin } from "lucide-react";
+import { Compass, Settings, MessageSquare, ArrowRight, AlertCircle, Bed, Maximize2, MapPin, ChevronRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import LifestyleMatchPanel from "@/components/swipe/LifestyleMatchPanel";
+import PropertyDetailPanel from "@/components/swipe/PropertyDetailPanel";
 
 export default function BuyerDashboard() {
   const [user, setUser] = useState(null);
@@ -17,6 +18,7 @@ export default function BuyerDashboard() {
   const [topMatch, setTopMatch] = useState(null);
   const [topMatchBreakdown, setTopMatchBreakdown] = useState({});
   const [unreadMatches, setUnreadMatches] = useState(0);
+  const [showDetail, setShowDetail] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -203,6 +205,13 @@ export default function BuyerDashboard() {
                 scoreBreakdown={topMatchBreakdown}
               />
             </div>
+            <button
+              onClick={() => setShowDetail(true)}
+              className="w-full px-4 py-3 flex items-center justify-between border-t border-slate-100 hover:bg-slate-50 transition-colors text-xs font-semibold text-slate-500"
+            >
+              View details & map
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+            </button>
           </Card>
         </div>
       )}
@@ -251,6 +260,17 @@ export default function BuyerDashboard() {
           </Link>
         ))}
       </div>
+
+      {showDetail && topMatch?.listing && (
+        <PropertyDetailPanel
+          listing={topMatch.listing}
+          profile={profile}
+          scoreBreakdown={topMatchBreakdown}
+          lifeScore={topMatch.compatibility_score}
+          onClose={() => setShowDetail(false)}
+        />
+      )}
+
     </div>
   );
 }

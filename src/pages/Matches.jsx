@@ -14,7 +14,8 @@ import { Navigation } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/navigation";
 import { motion, useMotionValue, useTransform } from "framer-motion";
-import { X } from "lucide-react"; // add X to existing lucide import
+import { X, ChevronRight } from "lucide-react"; // add X to existing lucide import
+import PropertyDetailPanel from "@/components/swipe/PropertyDetailPanel";
 
 function SwipeableMatchCard({ match, onArchive, onRestore, isBuyer, children }) {
   const x = useMotionValue(0);
@@ -77,6 +78,7 @@ export default function Matches() {
   const [expandedNotes, setExpandedNotes] = useState(null);
   const [showComparison, setShowComparison] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [detailMatch, setDetailMatch] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -233,6 +235,7 @@ export default function Matches() {
                 setMatches(prev => prev.map(m => m.id === match.id ? { ...m, status: 'active' } : m));
               }}
               isBuyer={isBuyer}
+              onDetail={() => setDetailMatch(match)}
             >
               <Card
                 className={`border-slate-100 overflow-hidden ${
@@ -393,6 +396,17 @@ export default function Matches() {
                 </div>
               )}
 
+              {isBuyer && match.listing && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setDetailMatch(match); }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="w-full px-4 py-3 flex items-center justify-between border-t border-slate-100 hover:bg-slate-50 transition-colors text-xs font-semibold text-slate-500"
+                >
+                  View details & map
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              )}
+
               {/* Notes panel */}
               {isBuyer && expandedNotes === match.id && (
                 <div className="border-t border-slate-100 p-4 bg-slate-50/50">
@@ -404,6 +418,17 @@ export default function Matches() {
             ))}
         </div>
       )}
+
+      {detailMatch && (
+        <PropertyDetailPanel
+          listing={detailMatch.listing}
+          lifeScore={detailMatch.compatibility_score}
+          scoreBreakdown={detailMatch.scoreBreakdown}
+          profile={profile}
+          onClose={() => setDetailMatch(null)}
+        />
+      )}
+
     </div>
   );
 }

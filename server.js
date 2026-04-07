@@ -266,12 +266,14 @@ function computeScoreFromAmenities(amenities, profile, listingCoords) {
     }
   }
 
+
+  
   // Custom amenities
   const customAmenityData = amenities.customAmenities || {};
   for (const custom of (profile.custom_amenities || [])) {
     if (!customAmenityData[custom.query]) continue;
     totalCriteria++;
-    const { distance_m, name } = customAmenityData[custom.query];
+    const { distance_m, name, lat, lng } = customAmenityData[custom.query];
     const threshold = custom.minutes || 10;
     const mode = custom.mode || 'walk';
     const buffer = mode === 'walk' ? 3 : 5;
@@ -279,12 +281,12 @@ function computeScoreFromAmenities(amenities, profile, listingCoords) {
 
     if (minutes <= threshold) {
       totalPoints += 1;
-      breakdown[`custom_${custom.query}`] = { label: custom.label, status: 'full', points: 1, minutes: Math.round(minutes), name };
+      breakdown[`custom_${custom.query}`] = { label: custom.label, status: 'full', points: 1, minutes: Math.round(minutes), name, lat, lng };
     } else if (minutes <= threshold + buffer) {
       totalPoints += 0.5;
-      breakdown[`custom_${custom.query}`] = { label: custom.label, status: 'partial', points: 0.5, minutes: Math.round(minutes), name };
+      breakdown[`custom_${custom.query}`] = { label: custom.label, status: 'partial', points: 0.5, minutes: Math.round(minutes), name, lat, lng };
     } else {
-      breakdown[`custom_${custom.query}`] = { label: custom.label, status: 'none', points: 0, minutes: Math.round(minutes), name };
+      breakdown[`custom_${custom.query}`] = { label: custom.label, status: 'none', points: 0, minutes: Math.round(minutes), name, lat, lng };
     }
   }
 
@@ -562,19 +564,24 @@ app.post('/api/precompute-custom-amenities', async (req, res) => {
             minDist = dist;
             nearest = { 
               name: r.tags?.name || r.tags?.['name:en'] || r.tags?.operator || custom.query, 
-              distance_m: dist 
+              distance_m: dist,
+              lat: r.lat,
+              lng: r.lon,
             };
           }
         }
 
         if (nearest) {
+          console.log('nearest found:', nearest.name, 'lat:', nearest.lat, 'lng:', nearest.lng);
           rows.push({
             user_id: userId,
             listing_id: listing.id,
             query: custom.query,
             name: nearest.name,
             distance_m: nearest.distance_m,
-          });
+            lat: nearest.lat,
+            lng: nearest.lng,
+          });          
         }
       }
     }
@@ -643,7 +650,7 @@ app.post('/api/compute-scores', async (req, res) => {
     const customAmenityMap = {}; // { listing_id: { query: { name, distance_m } } }
     for (const row of (customRows || [])) {
       if (!customAmenityMap[row.listing_id]) customAmenityMap[row.listing_id] = {};
-      customAmenityMap[row.listing_id][row.query] = { name: row.name, distance_m: row.distance_m };
+      customAmenityMap[row.listing_id][row.query] = { name: row.name, distance_m: row.distance_m, lat: row.lat, lng: row.lng };
     }
 
     // Geocode any important places that have postal_code but no lat/lng (legacy entries)
