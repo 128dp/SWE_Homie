@@ -235,17 +235,38 @@ export default function ManageListings() {
   };
 
   const handlePhotoUpload = async (e) => {
-    const files = Array.from(e.target.files);
-  
-    for (const file of files) {
-      const { file_url } = await api.integrations.Core.UploadFile({ file });
-  
-      setForm((f) => ({
-        ...f,
-        photos: [...f.photos, file_url],
-      }));
+  const files = Array.from(e.target.files);
+
+  for (const file of files) {
+    const ext = file.name.split(".").pop();
+    const fileName = `listings/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+
+    console.log("Uploading to bucket: uploads, path:", fileName);
+
+    const { data, error } = await supabase.storage
+      .from("uploads")
+      .upload(fileName, file, { cacheControl: "3600", upsert: false });
+
+    console.log("Upload result:", data, error);
+
+    if (error) {
+      toast.error(`Failed to upload ${file.name}: ${error.message}`);
+      console.error("Upload error:", error);
+      continue;
     }
-  };
+
+    const { data: urlData } = supabase.storage
+      .from("uploads")
+      .getPublicUrl(fileName);
+
+    console.log("Public URL:", urlData.publicUrl);
+
+    setForm((f) => ({
+      ...f,
+      photos: [...f.photos, urlData.publicUrl],
+    }));
+  }
+};
 
   const removePhoto = async (index) => {
     const url = form.photos[index];
