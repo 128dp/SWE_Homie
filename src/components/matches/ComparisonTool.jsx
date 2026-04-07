@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Sparkles, Star, CheckSquare, Square, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function ComparisonTool({ matches, user, onClose }) {
   const [notes, setNotes] = useState({});
@@ -140,7 +141,7 @@ Please provide a concise, structured comparison across these properties. Highlig
                 <Sparkles className="w-4 h-4 text-indigo-500" />
                 <span className="text-sm font-semibold text-indigo-700">AI Comparison</span>
               </div>
-              <ReactMarkdown className="text-sm prose prose-sm prose-slate max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} className="text-sm prose prose-sm prose-slate max-w-none [&_table]:w-full [&_table]:border-collapse [&_th]:bg-slate-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_td]:px-3 [&_td]:py-2 [&_td]:text-xs [&_tr]:border-b [&_tr]:border-slate-100">
                 {result}
               </ReactMarkdown>
             </div>
