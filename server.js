@@ -155,6 +155,27 @@ async function geocodeAddress(address, block, town) {
   return null;
 }
 
+// ─── Fetch nearest bus stop via Overpass (server-side, POST, with timeout) ───
+async function fetchNearestBusStopCoords(lat, lng) {
+  try {
+    const query = `[out:json][timeout:10];node(around:400,${lat},${lng})[highway=bus_stop];out 1;`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(query)}`,
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const data = await res.json();
+    const node = data.elements?.[0];
+    if (!node) return null;
+    const distance_m = haversineDistance(lat, lng, node.lat, node.lon);
+    return { lat: node.lat, lng: node.lon, name: node.tags?.name || node.tags?.ref || 'Bus Stop', distance_m };
+  } catch { return null; }
+}
+
 // ─── Find nearest amenity from local Supabase table ──────────────────────────
 async function findNearestFromTable(tableName, lat, lng) {
   try {
@@ -184,7 +205,7 @@ function computeScoreFromAmenities(amenities, profile, listingCoords) {
 
   const AMENITY_MAP = [
     { key: 'mrt',         distKey: 'mrt_distance_m',         nameKey: 'mrt_name',         label: 'MRT Station',   mode: 'walk' },
-    { key: 'bus',         distKey: 'bus_distance_m',         nameKey: null,               label: 'Bus Stop',      mode: 'walk' },
+    { key: 'bus',         distKey: 'bus_distance_m',         nameKey: 'bus_name',         latKey: 'bus_lat', lngKey: 'bus_lng', label: 'Bus Stop', mode: 'walk' },
     { key: 'hawker',      distKey: 'hawker_distance_m',      nameKey: 'hawker_name',      label: 'Hawker Centre', mode: profile.hawker_mode || 'walk' },
     { key: 'supermarket', distKey: 'supermarket_distance_m', nameKey: 'supermarket_name', label: 'Supermarket',   mode: profile.supermarket_mode || 'walk' },
     { key: 'parks',       distKey: 'parks_distance_m',       nameKey: 'parks_name',       label: 'Parks',         mode: profile.parks_mode || 'walk' },
@@ -244,6 +265,9 @@ function computeScoreFromAmenities(amenities, profile, listingCoords) {
 
     const distanceM = amenities[amenity.distKey];
     const name = amenity.nameKey ? amenities[amenity.nameKey] : amenity.label;
+    const lat  = amenity.latKey  ? amenities[amenity.latKey]  : undefined;
+    const lng  = amenity.lngKey  ? amenities[amenity.lngKey]  : undefined;
+    const coords = (lat != null && lng != null) ? { lat, lng } : {};
     const threshold = profile[`${amenity.key}_minutes`] || 10;
     const buffer = amenity.mode === 'walk' ? 3 : 5;
 
@@ -257,12 +281,12 @@ function computeScoreFromAmenities(amenities, profile, listingCoords) {
     const minutes = distanceToMinutes(distanceM, amenity.mode);
     if (minutes <= threshold) {
       totalPoints += 1;
-      breakdown[amenity.key] = { label: amenity.label, status: 'full', points: 1, minutes: Math.round(minutes), name };
+      breakdown[amenity.key] = { label: amenity.label, status: 'full', points: 1, minutes: Math.round(minutes), name, ...coords };
     } else if (minutes <= threshold + buffer) {
       totalPoints += 0.5;
-      breakdown[amenity.key] = { label: amenity.label, status: 'partial', points: 0.5, minutes: Math.round(minutes), name };
+      breakdown[amenity.key] = { label: amenity.label, status: 'partial', points: 0.5, minutes: Math.round(minutes), name, ...coords };
     } else {
-      breakdown[amenity.key] = { label: amenity.label, status: 'none', points: 0, minutes: Math.round(minutes), name };
+      breakdown[amenity.key] = { label: amenity.label, status: 'none', points: 0, minutes: Math.round(minutes), name, ...coords };
     }
   }
 
@@ -353,15 +377,15 @@ app.post('/api/precompute-amenities', async (req, res) => {
           findNearestFromTable('amenity_park', coords.lat, coords.lng),
         ]);
 
-        // Bus stop: estimate as 200m average (bus stops are ~200m apart in SG)
-        const bus_distance_m = 200;
+        const bus = await fetchNearestBusStopCoords(coords.lat, coords.lng);
+        const bus_distance_m = bus?.distance_m ?? 200;
 
         await supabase.from('listings').update({ lat: coords.lat, lng: coords.lng }).eq('id', listing.id);
 
         return {
           listing_id: listing.id,
           mrt_distance_m: mrt?.distance_m ?? null, mrt_name: mrt?.name ?? null,
-          bus_distance_m,
+          bus_distance_m, bus_name: bus?.name ?? null, bus_lat: bus?.lat ?? null, bus_lng: bus?.lng ?? null,
           hawker_distance_m: hawker?.distance_m ?? null, hawker_name: hawker?.name ?? null,
           supermarket_distance_m: supermarket?.distance_m ?? null, supermarket_name: supermarket?.name ?? null,
           parks_distance_m: park?.distance_m ?? null, parks_name: park?.name ?? null,
@@ -416,10 +440,11 @@ app.post('/api/precompute-single-listing', async (req, res) => {
     if (updateErr) console.error('❌ Failed to save lat/lng:', updateErr);
     else console.log('✅ Geocoded:', coords.lat, coords.lng);
 
+    const bus = await fetchNearestBusStopCoords(coords.lat, coords.lng);
     const { error } = await supabase.from('listing_amenities').upsert({
       listing_id: listingId,
       mrt_distance_m: mrt?.distance_m ?? null, mrt_name: mrt?.name ?? null,
-      bus_distance_m: 200,
+      bus_distance_m: bus?.distance_m ?? 200, bus_name: bus?.name ?? null, bus_lat: bus?.lat ?? null, bus_lng: bus?.lng ?? null,
       hawker_distance_m: hawker?.distance_m ?? null, hawker_name: hawker?.name ?? null,
       supermarket_distance_m: supermarket?.distance_m ?? null, supermarket_name: supermarket?.name ?? null,
       parks_distance_m: park?.distance_m ?? null, parks_name: park?.name ?? null,
