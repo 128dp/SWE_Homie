@@ -53,15 +53,26 @@ function makePinIcon(color, shortLabel, active = false) {
 const homeIcon = makeHomeIcon();
 
 // ─── Map controller ───────────────────────────────────────────────────────────
-function MapController({ target, zoom = 16 }) {
+function MapController({ target, home, zoom = 16 }) {
   const map = useMap();
   const prev = useRef(null);
   useEffect(() => {
-    if (target && target !== prev.current) {
-      prev.current = target;
-      map.flyTo(target, zoom, { duration: 0.5 });
+    const dest = target ?? home;
+    if (dest && dest !== prev.current) {
+      prev.current = dest;
+      map.flyTo(dest, target ? zoom : 15, { duration: 0.5 });
     }
   }, [target]);
+  return null;
+}
+
+// Opens the Leaflet popup on the marker when active
+function AutoPopup({ markerRef, active }) {
+  useEffect(() => {
+    if (!markerRef.current) return;
+    if (active) markerRef.current.openPopup();
+    else markerRef.current.closePopup();
+  }, [active]);
   return null;
 }
 
@@ -98,11 +109,13 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
   const [focusedKey,  setFocusedKey]  = useState(null);
   const [amenityLocs, setAmenityLocs] = useState({});   // key → { lat, lng, label }
   const [loadingLocs, setLoadingLocs] = useState(true);
+  const markerRefs = useRef({});  // key → leaflet marker ref
 
   const hasCoords  = !!(listing.lat && listing.lng);
   const scoreColor = lifeScore >= 70 ? "#22c55e" : lifeScore >= 40 ? "#f97316" : "#ef4444";
 
   const focusedLoc = focusedKey ? amenityLocs[focusedKey] : null;
+  // When a pin is focused, fly to it. When cleared via Back button, fly home.
   const mapTarget  = focusedLoc ? [focusedLoc.lat, focusedLoc.lng] : null;
 
   // ── Fetch all amenity pin coords on mount ──────────────────────────────────
@@ -116,10 +129,29 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
       const bd = scoreBreakdown[key];
       if (!bd) continue;
 
-      // Bus: coords are precomputed in the breakdown (from listing_amenities)
+      // Bus: use precomputed coords if available, else fall back to Overpass
       if (key === "bus") {
         if (bd.lat != null && bd.lng != null) {
           locs.bus = { lat: bd.lat, lng: bd.lng, label: bd.name || "Bus Stop" };
+        } else {
+          // Fallback: query Overpass directly (POST with timeout)
+          tasks.push((async () => {
+            try {
+              const query = `[out:json][timeout:10];node(around:400,${listing.lat},${listing.lng})[highway=bus_stop];out 1;`;
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 12000);
+              const res = await fetch("https://overpass-api.de/api/interpreter", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: `data=${encodeURIComponent(query)}`,
+                signal: controller.signal,
+              });
+              clearTimeout(timer);
+              const data = await res.json();
+              const node = data.elements?.[0];
+              if (node) locs.bus = { lat: node.lat, lng: node.lon, label: node.tags?.name || node.tags?.ref || "Bus Stop" };
+            } catch {}
+          })());
         }
         continue;
       }
@@ -397,6 +429,18 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
 
           {/* ── RIGHT: persistent map ── */}
           <div className="flex-1 relative min-w-0">
+            {/* Floating "back to listing" button — shown when a pin is focused */}
+            {focusedKey && hasCoords && (
+              <button
+                onClick={() => {
+                  setFocusedKey(null);
+                  // MapController watches target — setting to null triggers home fly via target ?? home
+                }}
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-full shadow-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <MapPin className="w-3.5 h-3.5 text-orange-500" /> Back to listing
+              </button>
+            )}
             {hasCoords ? (
               <MapContainer
                 center={[listing.lat, listing.lng]}
@@ -410,7 +454,7 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
                   attribution="© OpenStreetMap contributors © CARTO"
                 />
 
-                <MapController target={mapTarget} zoom={16} />
+                <MapController target={mapTarget} home={hasCoords ? [listing.lat, listing.lng] : null} zoom={16} />
 
                 {/* Home marker */}
                 <Marker position={[listing.lat, listing.lng]} icon={homeIcon}>
@@ -424,18 +468,25 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
                   const active = focusedKey === key;
                   const pinColor = meta?.pin ?? "#6366f1";
                   const shortLabel = clip(loc.label, 16);
+                  if (!markerRefs.current[key]) markerRefs.current[key] = React.createRef();
+                  const markerRef = markerRefs.current[key];
                   return (
                     <Marker
                       key={key}
+                      ref={markerRef}
                       position={[loc.lat, loc.lng]}
                       icon={makePinIcon(pinColor, shortLabel, active)}
                       eventHandlers={{ click: () => toggleFocus(key) }}
                     >
+                      <AutoPopup markerRef={markerRef} active={active} />
                       <Popup>
-                        <p className="text-xs font-semibold m-0">{loc.label}</p>
-                        {bd?.minutes != null && (
-                          <p className="text-[11px] text-slate-500 m-0 mt-0.5">{bd.minutes} min away</p>
-                        )}
+                        <div style={{ minWidth: 120 }}>
+                          <p className="text-xs font-semibold m-0" style={{ color: pinColor }}>{meta?.label ?? loc.label}</p>
+                          <p className="text-[11px] text-slate-600 m-0 mt-0.5 font-medium">{loc.label}</p>
+                          {bd?.minutes != null && (
+                            <p className="text-[11px] text-slate-400 m-0 mt-0.5">{bd.minutes} min away</p>
+                          )}
+                        </div>
                       </Popup>
                     </Marker>
                   );
