@@ -31,12 +31,19 @@ function makeHomeIcon() {
 }
 
 function makePinIcon(color, shortLabel, active = false) {
-  const d = active ? 13 : 10;
-  const glow = active ? `box-shadow:0 0 0 3px ${color}30,0 2px 8px rgba(0,0,0,0.35)` : `box-shadow:0 2px 6px rgba(0,0,0,0.3)`;
+  const d = active ? 14 : 10;
+  const border = active ? `3px solid white` : `2px solid white`;
+  const glow = active
+    ? `box-shadow:0 0 0 3px ${color}40,0 2px 10px rgba(0,0,0,0.4)`
+    : `box-shadow:0 1px 5px rgba(0,0,0,0.3)`;
+  // Label only shown when active — prevents overlap when many pins are close
+  const label = active
+    ? `<div style="background:${color};color:white;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.2);line-height:1.6;max-width:100px;overflow:hidden;text-overflow:ellipsis;margin-top:3px">${shortLabel}</div>`
+    : "";
   return new L.DivIcon({
-    html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none">
-      <div style="width:${d}px;height:${d}px;border-radius:50%;background:${color};border:2.5px solid white;${glow}"></div>
-      <div style="background:white;color:#1e293b;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.15);line-height:1.5;max-width:90px;overflow:hidden;text-overflow:ellipsis">${shortLabel}</div>
+    html: `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:none">
+      <div style="width:${d}px;height:${d}px;border-radius:50%;background:${color};border:${border};${glow}"></div>
+      ${label}
     </div>`,
     className: "",
     iconAnchor: [Math.ceil(d / 2), Math.ceil(d / 2)],
@@ -269,7 +276,7 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
                                   : bd.status === "partial" ? "text-amber-500"
                                   : "text-slate-400"
                                 }`}>
-                                  {bd.minutes}m
+                                  {bd.minutes} min
                                 </span>
                               )}
                               {noData    ? <MinusCircle className="w-3.5 h-3.5 text-slate-300" />
@@ -317,7 +324,7 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
                                   bd.status === "full" ? "text-green-600"
                                   : bd.status === "partial" ? "text-amber-500"
                                   : "text-slate-400"
-                                }`}>{bd.minutes}m</span>
+                                }`}>{bd.minutes} min</span>
                               )}
                               {!bd ? <MinusCircle className="w-3.5 h-3.5 text-slate-300" />
                                 : active ? <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500" />
@@ -355,7 +362,10 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-semibold text-slate-700 truncate">{place.label}</p>
-                              <p className="text-[10px] text-slate-400">target {place.minutes}min</p>
+                              <p className="text-[10px] text-slate-400">
+                                { { walk: "🚶", commute: "🚌", drive: "🚗" }[place.mode || "commute"] }
+                                {" "}{place.mode || "commute"} · target {place.minutes}min
+                              </p>
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
                               {bd?.minutes != null && (
@@ -363,7 +373,7 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
                                   bd.status === "full" ? "text-green-600"
                                   : bd.status === "partial" ? "text-amber-500"
                                   : "text-slate-400"
-                                }`}>{bd.minutes}m</span>
+                                }`}>{bd.minutes} min</span>
                               )}
                               {active ? <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500" /> : null}
                             </div>
