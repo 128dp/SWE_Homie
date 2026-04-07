@@ -8,15 +8,27 @@ import { motion } from "framer-motion";
 export default function SetupRole() {
   const [user, setUser] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [redirecting, setRedirecting] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       const me = await api.auth.me();
       setUser(me);
-      // If user already has a type, redirect
+      // If user already has a role, skip setup entirely
       if (me.user_type) {
         window.location.href = createPageUrl(me.user_type === "agent" ? "AgentDashboard" : "BuyerDashboard");
+        return;
       }
+      // If a role was pre-selected on the landing page, auto-apply it
+      const params = new URLSearchParams(window.location.search);
+      const preselected = params.get("role");
+      if (preselected === "buyer" || preselected === "agent") {
+        await api.auth.updateMe({ user_type: preselected });
+        window.location.href = createPageUrl(preselected === "agent" ? "AgentDashboard" : "BuyerDashboard");
+        return;
+      }
+      // No pre-selected role — show the picker
+      setRedirecting(false);
     };
     load();
   }, []);
@@ -31,6 +43,14 @@ export default function SetupRole() {
     { key: "buyer", label: "Buyer", desc: "I'm looking to purchase a property", icon: Home, color: "from-orange-500 to-amber-500" },
     { key: "agent", label: "Property Agent", desc: "I list properties for sale or rent", icon: Building2, color: "from-amber-500 to-orange-500" },
   ];
+
+  if (redirecting) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-slate-200 border-t-orange-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">

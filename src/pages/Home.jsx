@@ -89,7 +89,7 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button
-                onClick={() => api.auth.redirectToLogin({ next: createPageUrl("SetupRole") })}
+                onClick={() => api.auth.redirectToLogin({ next: createPageUrl("SetupRole") + "?role=buyer" })}
                 className="bg-orange-600 hover:bg-orange-500 text-white rounded-full px-8 h-12 text-base font-semibold gap-2"
               >
                 Get Started as Buyer <ArrowRight className="w-4 h-4" />
@@ -97,7 +97,7 @@ export default function Home() {
               <Button
                 variant="outline"
                 className="border-slate-300 text-slate-700 hover:bg-slate-100 rounded-full px-8 h-12 text-base font-medium"
-                onClick={() => api.auth.redirectToLogin({ next: createPageUrl("SetupRole") })}
+                onClick={() => api.auth.redirectToLogin({ next: createPageUrl("SetupRole") + "?role=agent" })}
               >
                 I'm a Property Agent
               </Button>
