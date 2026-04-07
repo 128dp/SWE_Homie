@@ -309,9 +309,15 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
     if (!table || !bd?.name) { setSelectedLoc(null); return; }
     setLoadingKey(key);
     try {
-      const { data } = await supabase.from(table).select("lat,lng").eq("name", bd.name).limit(1);
-      if (data?.[0]) {
-        setSelectedLoc({ lat: data[0].lat, lng: data[0].lng, label: AMENITY_META[key].label, address: `${bd.name}, Singapore` });
+      // Fetch ALL rows with this name and pick the nearest to the listing.
+      // Avoids returning a wrong-branch of a chain (e.g. wrong Sheng Siong).
+      const { data } = await supabase.from(table).select("lat,lng").eq("name", bd.name);
+      if (data?.length) {
+        const nearest = data.reduce((best, row) => {
+          const d = haversine(listing.lat, listing.lng, row.lat, row.lng);
+          return d < best.d ? { row, d } : best;
+        }, { row: data[0], d: Infinity }).row;
+        setSelectedLoc({ lat: nearest.lat, lng: nearest.lng, label: AMENITY_META[key].label, address: `${bd.name}, Singapore` });
       } else {
         setSelectedLoc(null);
       }
