@@ -789,4 +789,11 @@ app.post('/api/seed', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
+
+// ─── GET /api/onemap-token ────────────────────────────────────────────────────
+app.get('/api/onemap-token', async (req, res) => {
+  const token = await getOneMapToken();
+  res.json({ token });
+});
+
 app.listen(PORT, () => console.log(`🏠 Homie API running on http://localhost:${PORT}`));
