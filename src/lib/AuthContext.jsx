@@ -7,9 +7,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [isLoadingPublicSettings] = useState(false);
-  const [authError, setAuthError] = useState(null);
-  const [appPublicSettings] = useState({ public_settings: {} });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -44,14 +41,8 @@ export const AuthProvider = ({ children }) => {
     window.location.href = '/';
   };
 
-  const navigateToLogin = () => { window.location.href = '/login'; };
-  const checkAppState = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) loadUserProfile(session.user);
-  };
-
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, isLoadingAuth, isLoadingPublicSettings, authError, appPublicSettings, logout, navigateToLogin, checkAppState }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, isLoadingAuth, logout }}>
       {children}
     </AuthContext.Provider>
   );

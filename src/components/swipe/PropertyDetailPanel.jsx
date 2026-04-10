@@ -175,8 +175,6 @@ export default function PropertyDetailPanel({ listing, profile, scoreBreakdown, 
     for (const custom of (profile?.custom_amenities || [])) {
       const bd = scoreBreakdown[`custom_${custom.query}`];
 
-      console.log("CUSTOM AMENITY:", custom, bd);
-
       if (bd?.lat != null && bd?.lng != null) {
         locs[`custom_${custom.query}`] = { lat: bd.lat, lng: bd.lng, label: bd.name, type: custom.label };
       }

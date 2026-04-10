@@ -564,16 +564,12 @@ app.post('/api/precompute-custom-amenities', async (req, res) => {
           lon: r.lon ?? r.center?.lon,
           tags: r.tags || {},
         })).filter(r => r.lat && r.lon);
-        console.log(`Overpass results for "${custom.query}":`, results.length);
       } catch (err) {
-        console.log(`Overpass error for ${custom.query}:`, err.message);
+        console.error(`Overpass error for ${custom.query}:`, err.message);
         continue;
       }
 
-      if (results.length === 0) {
-        console.log(`No Overpass results for: ${custom.query}`);
-        continue;
-      }
+      if (results.length === 0) continue;
 
       // For each listing, find nearest result from the search
       for (const listing of listings) {
@@ -597,7 +593,6 @@ app.post('/api/precompute-custom-amenities', async (req, res) => {
         }
 
         if (nearest) {
-          console.log('nearest found:', nearest.name, 'lat:', nearest.lat, 'lng:', nearest.lng);
           rows.push({
             user_id: userId,
             listing_id: listing.id,
@@ -611,17 +606,11 @@ app.post('/api/precompute-custom-amenities', async (req, res) => {
       }
     }
 
-    console.log('Rows to upsert:', rows.length);
     if (rows.length > 0) {
       const { error } = await supabase
         .from('custom_amenity_scores')
         .upsert(rows, { onConflict: 'user_id,listing_id,query' });
-      if (error) {
-        console.log('Upsert error:', error);
-        throw error;
-      } else {
-        console.log('Upsert success!');
-      }
+      if (error) throw error;
     }
 
     // Clean up old queries no longer in profile
@@ -642,7 +631,6 @@ app.post('/api/precompute-custom-amenities', async (req, res) => {
           .eq('user_id', userId)
           .eq('query', q);
       }
-      console.log('Cleaned up old queries:', queriesToDelete);
     }
 
     res.json({ processed: rows.length, message: 'Custom amenities precomputed!' });

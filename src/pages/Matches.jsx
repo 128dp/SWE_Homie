@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, Loader2, Heart, ChevronDown, ChevronUp, GitCompare, Bed, Maximize2, MapPin } from "lucide-react";
+import { MessageSquare, Loader2, Heart, ChevronDown, ChevronUp, GitCompare, Bed, Maximize2, MapPin, X, ChevronRight } from "lucide-react";
 import PropertyNotePanel from "@/components/matches/PropertyNotePanel";
 import ComparisonTool from "@/components/matches/ComparisonTool";
 import LifestyleMatchPanel from "@/components/swipe/LifestyleMatchPanel";
@@ -14,7 +14,6 @@ import { Navigation } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/navigation";
 import { motion, useMotionValue, useTransform } from "framer-motion";
-import { X, ChevronRight } from "lucide-react"; // add X to existing lucide import
 import PropertyDetailPanel from "@/components/swipe/PropertyDetailPanel";
 
 function SwipeableMatchCard({ match, onArchive, onRestore, isBuyer, children }) {

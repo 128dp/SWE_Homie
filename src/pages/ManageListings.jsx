@@ -235,65 +235,43 @@ export default function ManageListings() {
   };
 
   const handlePhotoUpload = async (e) => {
-  const files = Array.from(e.target.files);
+    const files = Array.from(e.target.files);
 
-  for (const file of files) {
-    const ext = file.name.split(".").pop();
-    const fileName = `listings/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    for (const file of files) {
+      const ext = file.name.split(".").pop();
+      const fileName = `listings/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
-    console.log("Uploading to bucket: uploads, path:", fileName);
+      const { error } = await supabase.storage
+        .from("uploads")
+        .upload(fileName, file, { cacheControl: "3600", upsert: false });
 
-    const { data, error } = await supabase.storage
-      .from("uploads")
-      .upload(fileName, file, { cacheControl: "3600", upsert: false });
+      if (error) {
+        toast.error(`Failed to upload ${file.name}: ${error.message}`);
+        continue;
+      }
 
-    console.log("Upload result:", data, error);
+      const { data: urlData } = supabase.storage
+        .from("uploads")
+        .getPublicUrl(fileName);
 
-    if (error) {
-      toast.error(`Failed to upload ${file.name}: ${error.message}`);
-      console.error("Upload error:", error);
-      continue;
+      setForm((f) => ({
+        ...f,
+        photos: [...f.photos, urlData.publicUrl],
+      }));
     }
-
-    const { data: urlData } = supabase.storage
-      .from("uploads")
-      .getPublicUrl(fileName);
-
-    console.log("Public URL:", urlData.publicUrl);
-
-    setForm((f) => ({
-      ...f,
-      photos: [...f.photos, urlData.publicUrl],
-    }));
-  }
-};
+  };
 
   const removePhoto = async (index) => {
     const url = form.photos[index];
-  
-    console.log("Deleting URL:", url);
-  
     try {
       const path = getPathFromUrl(url);
-      console.log("Extracted path:", path);
-  
-      const { data, error } = await supabase.storage
-        .from("uploads")
-        .remove([path]);
-  
-      console.log("Delete response:", data, error);
-  
-      if (error) {
-        throw error;
-      }
-  
+      const { error } = await supabase.storage.from("uploads").remove([path]);
+      if (error) throw error;
       setForm((f) => ({
         ...f,
         photos: f.photos.filter((_, i) => i !== index),
       }));
-  
     } catch (err) {
-      console.error("Failed to delete photo:", err);
       toast.error("Failed to delete photo");
     }
   };
